@@ -1,6 +1,6 @@
 """
-PDF generation module for HealthPath Agent with Chinese font support.
-Generates beautiful appointment itineraries in PDF format.
+PDF generation module for HealthPath Agent with beautiful, user-friendly design.
+Generates appointment itineraries in a warm, accessible format.
 """
 
 import os
@@ -24,13 +24,10 @@ except ImportError:
 def register_chinese_fonts():
     """Register Chinese fonts for reportlab"""
     try:
-        # Try to register system fonts
         font_paths = [
-            "C:\\Windows\\Fonts\\simhei.ttf",      # 黑体
-            "C:\\Windows\\Fonts\\simsun.ttc",      # 宋体
-            "C:\\Windows\\Fonts\\msyh.ttc",        # 微软雅黑
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
-            "/System/Library/Fonts/Arial.ttf",     # macOS
+            "C:\\Windows\\Fonts\\simhei.ttf",
+            "C:\\Windows\\Fonts\\simsun.ttc",
+            "C:\\Windows\\Fonts\\msyh.ttc",
         ]
 
         for font_path in font_paths:
@@ -55,23 +52,15 @@ def register_chinese_fonts():
 
 def generate_pdf_document(recommendations: List[Dict], task_params: Dict, output_path: str, large_font: bool = False):
     """
-    Generate a beautiful PDF document with appointment recommendations.
-
-    Args:
-        recommendations: List of ranked recommendations
-        task_params: Original task parameters
-        output_path: Path to save the PDF file
-        large_font: Whether to use large fonts for elderly users
+    Generate a beautiful, user-friendly PDF document with appointment recommendations.
     """
 
     if not REPORTLAB_AVAILABLE:
         generate_text_pdf(recommendations, task_params, output_path, large_font)
         return
 
-    # Register Chinese fonts
     chinese_font = register_chinese_fonts()
     if not chinese_font:
-        # Fallback to text PDF if no Chinese font available
         generate_text_pdf(recommendations, task_params, output_path, large_font)
         return
 
@@ -79,203 +68,179 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict, output
     doc = SimpleDocTemplate(
         output_path,
         pagesize=A4,
-        rightMargin=0.8*inch,
-        leftMargin=0.8*inch,
-        topMargin=1*inch,
+        rightMargin=0.6*inch,
+        leftMargin=0.6*inch,
+        topMargin=0.8*inch,
         bottomMargin=0.8*inch
     )
 
-    # Container for PDF elements
     elements = []
 
-    # Define styles with Chinese font
+    # Define styles
     if large_font:
-        # Large font styles for elderly users
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            fontName=chinese_font,
-            fontSize=32,
-            textColor=colors.HexColor('#1f4788'),
-            spaceAfter=24,
-            alignment=TA_CENTER,
-            leading=40
-        )
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            fontName=chinese_font,
-            fontSize=20,
-            textColor=colors.HexColor('#1f4788'),
-            spaceAfter=14,
-            spaceBefore=14,
-            leading=28
-        )
-        normal_style = ParagraphStyle(
-            'CustomNormal',
-            fontName=chinese_font,
-            fontSize=18,
-            textColor=colors.HexColor('#333333'),
-            spaceAfter=10,
-            leading=26
-        )
-        label_style = ParagraphStyle(
-            'Label',
-            fontName=chinese_font,
-            fontSize=16,
-            textColor=colors.HexColor('#555555'),
-            spaceAfter=8,
-            leading=24
-        )
+        title_size = 28
+        emoji_size = 24
+        heading_size = 18
+        normal_size = 16
+        small_size = 14
     else:
-        # Standard font sizes
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            fontName=chinese_font,
-            fontSize=24,
-            textColor=colors.HexColor('#1f4788'),
-            spaceAfter=20,
-            alignment=TA_CENTER,
-            leading=32
-        )
-        heading_style = ParagraphStyle(
-            'CustomHeading',
-            fontName=chinese_font,
-            fontSize=16,
-            textColor=colors.HexColor('#1f4788'),
-            spaceAfter=12,
-            spaceBefore=12,
-            leading=24
-        )
-        normal_style = ParagraphStyle(
-            'CustomNormal',
-            fontName=chinese_font,
-            fontSize=12,
-            textColor=colors.HexColor('#333333'),
-            spaceAfter=8,
-            leading=18
-        )
-        label_style = ParagraphStyle(
-            'Label',
-            fontName=chinese_font,
-            fontSize=11,
-            textColor=colors.HexColor('#555555'),
-            spaceAfter=6,
-            leading=16
-        )
+        title_size = 20
+        emoji_size = 18
+        heading_size = 14
+        normal_size = 12
+        small_size = 10
+
+    title_style = ParagraphStyle(
+        'Title',
+        fontName=chinese_font,
+        fontSize=title_size,
+        textColor=colors.HexColor('#FF6B6B'),
+        spaceAfter=6,
+        alignment=TA_CENTER,
+        leading=title_size + 4
+    )
+
+    emoji_heading_style = ParagraphStyle(
+        'EmojiHeading',
+        fontName=chinese_font,
+        fontSize=heading_size,
+        textColor=colors.HexColor('#FF6B6B'),
+        spaceAfter=12,
+        spaceBefore=12,
+        leading=heading_size + 4
+    )
+
+    normal_style = ParagraphStyle(
+        'Normal',
+        fontName=chinese_font,
+        fontSize=normal_size,
+        textColor=colors.HexColor('#333333'),
+        spaceAfter=8,
+        leading=normal_size + 4
+    )
+
+    small_style = ParagraphStyle(
+        'Small',
+        fontName=chinese_font,
+        fontSize=small_size,
+        textColor=colors.HexColor('#666666'),
+        spaceAfter=6,
+        leading=small_size + 2
+    )
 
     # Title
-    elements.append(Paragraph("就医行程单", title_style))
-    elements.append(Spacer(1, 0.2*inch))
-
-    # Generation timestamp
-    timestamp_text = f"生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
-    elements.append(Paragraph(timestamp_text, label_style))
+    elements.append(Paragraph("👵 就医行程单", title_style))
+    elements.append(Paragraph(f"(本文件采用 {title_size}号超大字体生成，方便阅读)", small_style))
     elements.append(Spacer(1, 0.15*inch))
 
-    # Task information section with background
-    elements.append(Paragraph("【就医需求】", heading_style))
-    elements.append(Spacer(1, 0.08*inch))
-
-    task_info_data = [
-        [f"科室：", f"{task_params.get('department', '未指定')}"],
-        [f"症状：", f"{task_params.get('symptom', '未指定')}"],
-        [f"时间：", f"{task_params.get('time_window', '本周')}"],
-    ]
-
-    if task_params.get('special_requirements'):
-        task_info_data.append([f"特殊需求：", f"{task_params.get('special_requirements')}"])
-
-    task_table = Table(task_info_data, colWidths=[1.5*inch, 4*inch])
-    task_table.setStyle(TableStyle([
-        ('FONT', (0, 0), (-1, -1), chinese_font, 11 if not large_font else 14),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#1f4788')),
-        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#333333')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e0e0e0')),
-        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    elements.append(task_table)
-    elements.append(Spacer(1, 0.2*inch))
-
-    # Recommendations section
-    elements.append(Paragraph("【推荐方案】", heading_style))
-    elements.append(Spacer(1, 0.08*inch))
-
+    # Main recommendation
     if recommendations:
-        for idx, rec in enumerate(recommendations, 1):
-            # Recommendation header with background
-            rec_header = f"方案 {rec['rank']}：{rec['hospital_name']}"
-            rec_header_style = ParagraphStyle(
-                f'RecHeader{idx}',
-                fontName=chinese_font,
-                fontSize=14 if not large_font else 18,
-                textColor=colors.white,
-                spaceAfter=10,
-                spaceBefore=10,
-                leading=20
-            )
+        rec = recommendations[0]
 
-            # Create a table for the header with background color
-            header_table = Table([[rec_header]], colWidths=[6.5*inch])
-            header_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#1f4788')),
-                ('FONT', (0, 0), (-1, -1), chinese_font, 14 if not large_font else 18),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 10),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-                ('TOPPADDING', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ]))
-            elements.append(header_table)
-            elements.append(Spacer(1, 0.08*inch))
+        # 🏥 最重要的就诊信息
+        elements.append(Paragraph("🏥 最重要的就诊信息", emoji_heading_style))
 
-            # Recommendation details in table format
-            rec_details_data = [
-                ["医生", f"{rec['doctor_name']}（{rec['doctor_title']}）"],
-                ["挂号时间", rec['appointment_time']],
-                ["挂号费", f"{rec['total_cost']} 元"],
-                ["预计排队", f"{rec['queue_estimate_min']} 分钟"],
-                ["距离", f"{rec['distance_km']} 公里"],
-                ["交通时间", f"{rec['total_travel_time_min']} 分钟"],
-                ["综合评分", f"{rec['score']}/10"],
-                ["推荐理由", rec['reason']],
-            ]
+        info_data = [
+            ["去哪个医院：", f"{rec['hospital_name']}（距离 {rec['distance_km']} 公里，已为您挂好号了）"],
+            ["看什么科室：", f"{task_params.get('department', '未指定')}"],
+            ["看哪位医生：", f"{rec['doctor_name']} {rec['doctor_title']}"],
+            ["什么时间去：", f"{rec['appointment_time']}"],
+            ["预计排队：", f"约 {rec['queue_estimate_min']} 分钟"],
+        ]
 
-            details_table = Table(rec_details_data, colWidths=[1.5*inch, 4*inch])
-            details_table.setStyle(TableStyle([
-                ('FONT', (0, 0), (-1, -1), chinese_font, 10 if not large_font else 13),
-                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#1f4788')),
-                ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#333333')),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#f9f9f9')]),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e0e0e0')),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ]))
-            elements.append(details_table)
-            elements.append(Spacer(1, 0.15*inch))
+        info_table = Table(info_data, colWidths=[1.8*inch, 3.8*inch])
+        info_table.setStyle(TableStyle([
+            ('FONT', (0, 0), (-1, -1), chinese_font, normal_size),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#FF6B6B')),
+            ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#333333')),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#EEEEEE')),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 0.2*inch))
+
+        # 🚗 怎么去医院最方便？
+        elements.append(Paragraph("🚗 怎么去医院最方便？", emoji_heading_style))
+        elements.append(Paragraph(
+            f"推荐打车：大概需要 {rec['total_travel_time_min']} 分钟。您可以让家人帮您在手机上叫个车，直接送到医院。",
+            normal_style
+        ))
+        elements.append(Spacer(1, 0.08*inch))
+        elements.append(Paragraph(
+            f"综合评分：{rec['score']}/10 分 - {rec['reason']}",
+            normal_style
+        ))
+        elements.append(Spacer(1, 0.2*inch))
+
+        # 🎒 出门前检查清单
+        elements.append(Paragraph("🎒 出门前，请检查带好这些东西：", emoji_heading_style))
+        elements.append(Paragraph("(可以照着打个勾 ✅)", small_style))
+
+        checklist_items = [
+            "[ ] 身份证 （千万别忘了）",
+            "[ ] 医保卡 / 社保卡",
+            "[ ] 手机 & 充电宝",
+            "[ ] 钱包 / 支付宝",
+        ]
+
+        for item in checklist_items:
+            elements.append(Paragraph(item, normal_style))
+
+        elements.append(Spacer(1, 0.15*inch))
+
+        # 💡 特别提醒
+        elements.append(Paragraph(
+            "💡 特别提醒：请提前 15 分钟到达医院，以便完成挂号和分诊。如果到了医院不知道怎么走，可以直接问医院工作人员。",
+            normal_style
+        ))
+        elements.append(Spacer(1, 0.2*inch))
+
+        # 其他推荐方案
+        if len(recommendations) > 1:
+            elements.append(Paragraph("📋 其他推荐方案", emoji_heading_style))
+
+            for idx, alt_rec in enumerate(recommendations[1:], 2):
+                alt_data = [
+                    [f"方案 {idx}：", f"{alt_rec['hospital_name']}"],
+                    ["医生：", f"{alt_rec['doctor_name']} {alt_rec['doctor_title']}"],
+                    ["时间：", alt_rec['appointment_time']],
+                    ["评分：", f"{alt_rec['score']}/10"],
+                ]
+
+                alt_table = Table(alt_data, colWidths=[1.5*inch, 4.1*inch])
+                alt_table.setStyle(TableStyle([
+                    ('FONT', (0, 0), (-1, -1), chinese_font, small_size),
+                    ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#FF6B6B')),
+                    ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#666666')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#EEEEEE')),
+                ]))
+                elements.append(alt_table)
+                elements.append(Spacer(1, 0.1*inch))
 
     else:
-        elements.append(Paragraph("未找到匹配的号源", normal_style))
+        elements.append(Paragraph("未找到匹配的号源，请稍后重试。", normal_style))
 
     elements.append(Spacer(1, 0.2*inch))
 
     # Footer
-    footer_text = "提示：本文件仅供参考，具体挂号请以医院官网为准"
+    footer_text = "❤️ 祝您就医顺利！本文件仅供参考，具体挂号请以医院官网为准。"
     footer_style = ParagraphStyle(
         'Footer',
         fontName=chinese_font,
-        fontSize=9,
-        textColor=colors.HexColor('#999999'),
+        fontSize=small_size,
+        textColor=colors.HexColor('#FF6B6B'),
         alignment=TA_CENTER
     )
     elements.append(Paragraph(footer_text, footer_style))
@@ -286,53 +251,67 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict, output
 
 def generate_text_pdf(recommendations: List[Dict], task_params: Dict, output_path: str, large_font: bool = False):
     """
-    Fallback: Generate text-based PDF (saved as text file with .pdf extension).
+    Fallback: Generate text-based PDF.
     """
 
     lines = []
 
-    if large_font:
-        lines.append("=" * 80)
-        lines.append("就医行程单（大字版）".center(80))
-        lines.append("=" * 80)
-    else:
-        lines.append("=" * 60)
-        lines.append("就医行程单".center(60))
-        lines.append("=" * 60)
-
+    lines.append("👵 就医行程单")
     lines.append("")
-    lines.append(f"生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
+    lines.append(f"(本文件采用 {'24' if large_font else '12'}号超大字体生成，方便阅读)")
+    lines.append("")
+    lines.append("=" * 70)
     lines.append("")
 
-    lines.append("【就医需求】")
-    lines.append(f"科室：{task_params.get('department', '未指定')}")
-    lines.append(f"症状：{task_params.get('symptom', '未指定')}")
-    lines.append(f"时间要求：{task_params.get('time_window', '本周')}")
-    if task_params.get('special_requirements'):
-        lines.append(f"特殊需求：{task_params.get('special_requirements')}")
-    lines.append("")
-
-    lines.append("【推荐方案】")
     if recommendations:
-        for rec in recommendations:
+        rec = recommendations[0]
+
+        lines.append("🏥 最重要的就诊信息")
+        lines.append("")
+        lines.append(f"去哪个医院：{rec['hospital_name']}（距离 {rec['distance_km']} 公里，已为您挂好号了）")
+        lines.append(f"看什么科室：{task_params.get('department', '未指定')}")
+        lines.append(f"看哪位医生：{rec['doctor_name']} {rec['doctor_title']}")
+        lines.append(f"什么时间去：{rec['appointment_time']}")
+        lines.append(f"预计排队：约 {rec['queue_estimate_min']} 分钟")
+        lines.append("")
+
+        lines.append("🚗 怎么去医院最方便？")
+        lines.append("")
+        lines.append(f"推荐打车：大概需要 {rec['total_travel_time_min']} 分钟。您可以让家人帮您在手机上叫个车，直接送到医院。")
+        lines.append("")
+        lines.append(f"综合评分：{rec['score']}/10 分 - {rec['reason']}")
+        lines.append("")
+
+        lines.append("🎒 出门前，请检查带好这些东西：")
+        lines.append("")
+        lines.append("(可以照着打个勾 ✅)")
+        lines.append("")
+        lines.append("[ ] 身份证 （千万别忘了）")
+        lines.append("[ ] 医保卡 / 社保卡")
+        lines.append("[ ] 手机 & 充电宝")
+        lines.append("[ ] 钱包 / 支付宝")
+        lines.append("")
+
+        lines.append("💡 特别提醒：请提前 15 分钟到达医院，以便完成挂号和分诊。")
+        lines.append("")
+
+        if len(recommendations) > 1:
+            lines.append("📋 其他推荐方案")
             lines.append("")
-            lines.append(f"方案 {rec['rank']}：{rec['hospital_name']}")
-            lines.append(f"医生：{rec['doctor_name']}（{rec['doctor_title']}）")
-            lines.append(f"挂号时间：{rec['appointment_time']}")
-            lines.append(f"挂号费：{rec['total_cost']} 元")
-            lines.append(f"预计排队：{rec['queue_estimate_min']} 分钟")
-            lines.append(f"距离：{rec['distance_km']} 公里")
-            lines.append(f"交通时间：{rec['total_travel_time_min']} 分钟")
-            lines.append(f"综合评分：{rec['score']}/10")
-            lines.append(f"推荐理由：{rec['reason']}")
+            for idx, alt_rec in enumerate(recommendations[1:], 2):
+                lines.append(f"方案 {idx}：{alt_rec['hospital_name']}")
+                lines.append(f"  医生：{alt_rec['doctor_name']} {alt_rec['doctor_title']}")
+                lines.append(f"  时间：{alt_rec['appointment_time']}")
+                lines.append(f"  评分：{alt_rec['score']}/10")
+                lines.append("")
+
     else:
-        lines.append("未找到匹配的号源")
+        lines.append("未找到匹配的号源，请稍后重试。")
+        lines.append("")
 
+    lines.append("=" * 70)
     lines.append("")
-    lines.append("=" * 60)
-    lines.append("提示：本文件仅供参考，具体挂号请以医院官网为准")
-    lines.append("=" * 60)
+    lines.append("❤️ 祝您就医顺利！本文件仅供参考，具体挂号请以医院官网为准。")
 
-    # Save as text file
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(lines))
