@@ -1,0 +1,64 @@
+{
+  "hospitals": [
+    {
+      "id": "hospital_001",
+      "name": "北京协和医院",
+      "city": "北京",
+      "district": "海淀",
+      "address": "北京市东城区王府井帅府园1号",
+      "phone": "010-65296114",
+      "departments": ["骨科", "呼吸科", "心内科", "神经内科"],
+      "registration_fee": 100,
+      "distance_km": 2.5,
+      "travel_time_min": 15
+    },
+    {
+      "id": "hospital_002",
+      "name": "北京大学第一医院",
+      "city": "北京",
+      "district": "海淀",
+      "address": "北京市西城区西什库街8号",
+      "phone": "010-83572211",
+      "departments": ["骨科", "呼吸科", "消化科", "肾内科"],
+      "registration_fee": 100,
+      "distance_km": 3.2,
+      "travel_time_min": 20
+    },
+    {
+      "id": "hospital_003",
+      "name": "北京医院",
+      "city": "北京",
+      "district": "海淀",
+      "address": "北京市东城区东单北大街1号",
+      "phone": "010-65132266",
+      "departments": ["骨科", "心内科", "内分泌科", "呼吸科"],
+      "registration_fee": 100,
+      "distance_km": 4.1,
+      "travel_time_min": 25
+    },
+    {
+      "id": "hospital_004",
+      "name": "北京清华长庚医院",
+      "city": "北京",
+      "district": "海淀",
+      "address": "北京市昌平区回龙观镇北清路1号",
+      "phone": "010-56118888",
+      "departments": ["骨科", "呼吸科", "心内科", "神经外科"],
+      "registration_fee": 80,
+      "distance_km": 5.5,
+      "travel_time_min": 35
+    },
+    {
+      "id": "hospital_005",
+      "name": "北京中医医院",
+      "city": "北京",
+      "district": "海淀",
+      "address": "北京市东城区美术馆后街23号",
+      "phone": "010-64035343",
+      "departments": ["骨科", "针灸科", "推拿科", "呼吸科"],
+      "registration_fee": 60,
+      "distance_km": 3.8,
+      "travel_time_min": 22
+    }
+  ]
+}
