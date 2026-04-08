@@ -3,6 +3,10 @@ import os
 from datetime import datetime
 from typing import Dict, List
 
+from pdf_generator import generate_pdf_document
+from excel_generator import generate_excel_document
+
+
 def generate_output(recommendations: List[Dict], task_params: Dict, output_format: str = "excel") -> dict:
     """
     Generate formatted output documents.
@@ -53,128 +57,29 @@ def generate_output(recommendations: List[Dict], task_params: Dict, output_forma
 
 def generate_pdf(recommendations: List[Dict], task_params: Dict, output_dir: str, timestamp: str, format_type: str) -> str:
     """
-    Generate PDF document.
-
-    For now, returns a placeholder. In production, use reportlab or python-docx.
+    Generate PDF document using reportlab.
     """
 
     filename = f"appointment_itinerary_{timestamp}.pdf"
     filepath = os.path.join(output_dir, filename)
 
-    # Create a simple text representation for now
-    content = generate_pdf_content(recommendations, task_params, format_type)
-
-    # In production, use reportlab to create actual PDF
-    # For now, save as text file with .pdf extension for demo
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
+    large_font = format_type == "large_font_pdf"
+    generate_pdf_document(recommendations, task_params, filepath, large_font=large_font)
 
     return filepath
 
 
 def generate_excel(recommendations: List[Dict], task_params: Dict, output_dir: str, timestamp: str) -> str:
     """
-    Generate Excel document.
-
-    For now, returns a placeholder. In production, use openpyxl.
+    Generate Excel document using openpyxl.
     """
 
     filename = f"medical_travel_plan_{timestamp}.xlsx"
     filepath = os.path.join(output_dir, filename)
 
-    # Create a simple JSON representation for now
-    content = generate_excel_content(recommendations, task_params)
-
-    # In production, use openpyxl to create actual Excel file
-    # For now, save as JSON for demo
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(content, f, ensure_ascii=False, indent=2)
+    generate_excel_document(recommendations, task_params, filepath)
 
     return filepath
-
-
-def generate_pdf_content(recommendations: List[Dict], task_params: Dict, format_type: str) -> str:
-    """Generate PDF content as text"""
-
-    lines = []
-
-    if format_type == "large_font_pdf":
-        lines.append("=" * 60)
-        lines.append("就医行程单（大字版）".center(60))
-        lines.append("=" * 60)
-    else:
-        lines.append("=" * 60)
-        lines.append("就医行程单".center(60))
-        lines.append("=" * 60)
-
-    lines.append("")
-    lines.append(f"生成时间：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
-    lines.append("")
-
-    lines.append("【就医需求】")
-    lines.append(f"科室：{task_params.get('department', '未指定')}")
-    lines.append(f"症状：{task_params.get('symptom', '未指定')}")
-    lines.append(f"时间要求：{task_params.get('time_window', '本周')}")
-    lines.append("")
-
-    lines.append("【推荐方案】")
-    for rec in recommendations:
-        lines.append("")
-        lines.append(f"方案 {rec['rank']}：{rec['hospital_name']}")
-        lines.append(f"医生：{rec['doctor_name']}（{rec['doctor_title']}）")
-        lines.append(f"挂号时间：{rec['appointment_time']}")
-        lines.append(f"挂号费：{rec['total_cost']}元")
-        lines.append(f"预计排队：{rec['queue_estimate_min']}分钟")
-        lines.append(f"距离：{rec['distance_km']}公里")
-        lines.append(f"交通时间：{rec['total_travel_time_min']}分钟")
-        lines.append(f"推荐理由：{rec['reason']}")
-
-    lines.append("")
-    lines.append("=" * 60)
-    lines.append("提示：本文件仅供参考，具体挂号请以医院官网为准")
-    lines.append("=" * 60)
-
-    return "\n".join(lines)
-
-
-def generate_excel_content(recommendations: List[Dict], task_params: Dict) -> dict:
-    """Generate Excel content as structured data"""
-
-    return {
-        "metadata": {
-            "title": "医旅全景路书",
-            "generated_at": datetime.now().isoformat(),
-            "department": task_params.get("department"),
-            "symptom": task_params.get("symptom")
-        },
-        "recommendations": recommendations,
-        "task_parameters": task_params,
-        "sheets": {
-            "appointments": [
-                {
-                    "rank": rec["rank"],
-                    "hospital": rec["hospital_name"],
-                    "doctor": rec["doctor_name"],
-                    "title": rec["doctor_title"],
-                    "time": rec["appointment_time"],
-                    "fee": rec["total_cost"],
-                    "queue_min": rec["queue_estimate_min"],
-                    "score": rec["score"],
-                    "reason": rec["reason"]
-                }
-                for rec in recommendations
-            ],
-            "travel": [
-                {
-                    "hospital": rec["hospital_name"],
-                    "distance_km": rec["distance_km"],
-                    "travel_time_min": rec["total_travel_time_min"],
-                    "appointment_time": rec["appointment_time"]
-                }
-                for rec in recommendations
-            ]
-        }
-    }
 
 
 if __name__ == "__main__":
