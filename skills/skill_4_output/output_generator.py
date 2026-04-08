@@ -1,7 +1,11 @@
 import json
 import os
+import sys
 from datetime import datetime
 from typing import Dict, List
+
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(__file__))
 
 from pdf_generator import generate_pdf_document
 from excel_generator import generate_excel_document

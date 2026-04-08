@@ -6,7 +6,7 @@
 
 ```bash
 # 设置 DeepSeek API Key
-export DEEPSEEK_API_KEY="sk-cef4d7205b2e4ba29f8052f52e192c80"
+export DEEPSEEK_API_KEY="sk-"
 
 # 设置 AutoClaw 工作空间（可选）
 export AUTOCLAW_WORKSPACE="C:\Users\Administrator\.openclaw-autoclaw"
@@ -30,6 +30,7 @@ python tests/test_integration.py
 ### Skills 目录
 
 每个 Skill 包含：
+
 - `SKILL.md` - Skill 定义和文档
 - `_meta.json` - Skill 元数据
 - `*.py` - 实现代码
@@ -52,6 +53,7 @@ python tests/test_integration.py
 **功能**：使用 DeepSeek API 解析用户自然语言输入
 
 **关键代码**：
+
 ```python
 from intent_parser import parse_intent
 
@@ -63,6 +65,7 @@ task_params = parse_intent(user_input, use_deepseek=False)
 ```
 
 **输出参数**：
+
 - `symptom` - 症状
 - `department` - 科室
 - `target_city` - 目标城市
@@ -80,6 +83,7 @@ task_params = parse_intent(user_input, use_deepseek=False)
 **功能**：搜索多家医院的可用号源
 
 **关键代码**：
+
 ```python
 from hospital_crawler import search_available_slots
 
@@ -93,6 +97,7 @@ search_result = search_available_slots(task_params)
 ```
 
 **数据源**：
+
 - 当前：模拟数据 (`data/mock/available_slots.json`)
 - 后期：真实医院 API、网页爬取
 
@@ -103,6 +108,7 @@ search_result = search_available_slots(task_params)
 **功能**：评估和排序方案
 
 **关键代码**：
+
 ```python
 from decision_engine import evaluate_and_rank
 
@@ -114,6 +120,7 @@ recommendations = evaluate_and_rank(
 ```
 
 **评分算法**：
+
 ```
 score = 0.2 * distance_score + 0.3 * time_score + 0.3 * cost_score + 0.2 * queue_score
 ```
@@ -125,6 +132,7 @@ score = 0.2 * distance_score + 0.3 * time_score + 0.3 * cost_score + 0.2 * queue
 **功能**：生成 PDF/Excel 输出文档
 
 **关键代码**：
+
 ```python
 from output_generator import generate_output
 
@@ -136,6 +144,7 @@ output_result = generate_output(
 ```
 
 **支持格式**：
+
 - `large_font_pdf` - 大字版 PDF（老年友好）
 - `pdf` - 标准 PDF
 - `excel` - Excel 表格
@@ -154,7 +163,7 @@ intent = client.extract_intent(user_input)
 ### API 参数
 
 - `api_key` - DeepSeek API Key
-- `base_url` - API 端点（默认：https://api.deepseek.com/v1）
+- `base_url` - API 端点（默认：<https://api.deepseek.com/v1）>
 - `model` - 模型名称（默认：deepseek-chat）
 
 ### 错误处理
@@ -182,6 +191,7 @@ python config/autoclaw_integration.py
 ### Skill 位置
 
 注册后，Skills 位置：
+
 ```
 C:\Users\Administrator\.openclaw-autoclaw\skills\
 ├── healthpath-intent-understanding\
@@ -249,6 +259,7 @@ def calculate_score(slot: Dict, preference: str) -> float:
 ### 自定义输出格式
 
 在 `skills/skill_4_output/` 中添加新的生成器：
+
 - `pdf_generator.py` - PDF 生成
 - `excel_generator.py` - Excel 生成
 - 可添加：`word_generator.py`、`html_generator.py` 等
@@ -258,6 +269,7 @@ def calculate_score(slot: Dict, preference: str) -> float:
 ### Q: DeepSeek API 调用失败怎么办？
 
 A: 系统会自动回退到规则解析。检查：
+
 1. API Key 是否正确
 2. 网络连接是否正常
 3. API 配额是否充足
@@ -321,6 +333,6 @@ python config/autoclaw_integration.py
 
 ## 联系方式
 
-项目地址：https://github.com/jiezi1234/Zhishu.git
+项目地址：<https://github.com/jiezi1234/Zhishu.git>
 
 有问题或建议，欢迎提交 Issue 或 Pull Request。

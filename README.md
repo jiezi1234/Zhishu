@@ -121,6 +121,22 @@ python tests/test_integration.py
 输出：一体化医旅路书 Excel + 行程提醒
 ```
 
+## 运行演示
+
+python demo/demo.py
+
+## 运行测试
+
+python tests/test_integration.py
+
+## 注册 AutoClaw Skills
+  
+python config/autoclaw_integration.py
+
+## 查看使用指南
+
+cat docs/USAGE_GUIDE.md
+
 ## 数据源
 
 ### 模拟数据（当前）
