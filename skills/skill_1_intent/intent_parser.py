@@ -1,21 +1,37 @@
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 
-def parse_intent(user_input: str) -> dict:
+# Add parent directories to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'config'))
+
+from deepseek_client import DeepSeekClient
+
+
+def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
     """
     Parse user input into structured task parameters.
 
     Args:
         user_input: Natural language user request
+        use_deepseek: Whether to use DeepSeek API (True) or rule-based parsing (False)
 
     Returns:
         Structured task JSON with extracted parameters
     """
 
-    # For now, use rule-based parsing with DeepSeek fallback
-    # This is a simplified version - in production, call DeepSeek API
+    if use_deepseek:
+        # Try to use DeepSeek API first
+        client = DeepSeekClient()
+        task = client.extract_intent(user_input)
 
+        if task:
+            # Ensure all required fields are present
+            task.setdefault("timestamp", datetime.now().isoformat())
+            return task
+
+    # Fallback to rule-based parsing if DeepSeek fails or is disabled
     task = {
         "symptom": extract_symptom(user_input),
         "department": extract_department(user_input),

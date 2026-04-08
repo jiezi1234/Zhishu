@@ -2,11 +2,15 @@
 """
 End-to-end integration test for HealthPath Agent.
 Tests all 4 skills in sequence with sample data.
+Now using DeepSeek API for intent understanding.
 """
 
 import sys
 import json
 import os
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Add skills to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'skills', 'skill_1_intent'))
@@ -52,23 +56,23 @@ def run_end_to_end_test():
         print()
 
         try:
-            # Skill 1: Intent Understanding
-            print("【Skill 1】意图理解与约束抽取")
+            # Skill 1: Intent Understanding (now using DeepSeek API)
+            print("[Skill 1] Intent Understanding with DeepSeek API")
             print("-" * 70)
-            task_params = parse_intent(scenario['input'])
+            task_params = parse_intent(scenario['input'], use_deepseek=True)
             print(json.dumps(task_params, ensure_ascii=False, indent=2))
             print()
 
             # Skill 2: Hospital Crawler
-            print("【Skill 2】跨院号源巡航与标准化")
+            print("[Skill 2] Hospital Crawler and Slot Standardization")
             print("-" * 70)
             search_result = search_available_slots(task_params)
-            print(f"找到 {search_result['total_count']} 个可用号源")
+            print(f"Found {search_result['total_count']} available slots")
             print(json.dumps(search_result, ensure_ascii=False, indent=2)[:500] + "...")
             print()
 
             # Skill 3: Decision Engine
-            print("【Skill 3】医旅协同与多目标决策")
+            print("[Skill 3] Decision Engine with Multi-Criteria Evaluation")
             print("-" * 70)
             recommendations = evaluate_and_rank(
                 search_result['slots'],
@@ -79,7 +83,7 @@ def run_end_to_end_test():
             print()
 
             # Skill 4: Output Generator
-            print("【Skill 4】结果生成与触达")
+            print("[Skill 4] Output Generation")
             print("-" * 70)
             output_result = generate_output(
                 recommendations['recommendations'],
@@ -89,7 +93,7 @@ def run_end_to_end_test():
             print(json.dumps(output_result, ensure_ascii=False, indent=2))
             print()
 
-            print("[PASS] 测试通过")
+            print("[PASS] Test passed")
 
         except Exception as e:
             print(f"[FAIL] 测试失败：{str(e)}")
@@ -98,7 +102,7 @@ def run_end_to_end_test():
 
     print()
     print("=" * 70)
-    print("所有测试完成")
+    print("All tests completed")
     print("=" * 70)
 
 
