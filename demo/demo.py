@@ -132,6 +132,11 @@ def main():
         "下周从赣州去广州看呼吸科，帮我把挂号、车票、住宿一起规划。"
     )
 
+    demo_scenario(
+        "Scenario D: ",
+        "下周从赣州去广州看呼吸科，帮我把挂号、车票、住宿一起规划。"
+    )
+
     print("\n" + "*" * 80)
     print("*" + " " * 78 + "*")
     print("*" + "  Demo Complete!".center(78) + "*")

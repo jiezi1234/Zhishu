@@ -6,7 +6,7 @@
 
 ```bash
 # 设置 DeepSeek API Key
-export DEEPSEEK_API_KEY="sk-"
+export DEEPSEEK_API_KEY="sk-..."
 
 # 设置 AutoClaw 工作空间（可选）
 export AUTOCLAW_WORKSPACE="C:\Users\Administrator\.openclaw-autoclaw"
