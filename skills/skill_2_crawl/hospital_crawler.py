@@ -1,11 +1,18 @@
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import List, Dict
+
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+from hospital_adapter import HospitalDataManager
 
 def search_available_slots(task_params: dict) -> dict:
     """
     Search for available appointment slots based on task parameters.
+    Uses real data sources with fallback to mock data.
 
     Args:
         task_params: Structured task parameters from Skill 1
@@ -19,9 +26,14 @@ def search_available_slots(task_params: dict) -> dict:
     time_window = task_params.get("time_window", "this_week")
     travel_preference = task_params.get("travel_preference", "balanced")
 
-    # Load mock data
+    # Initialize data manager (tries real sources, falls back to mock)
+    data_manager = HospitalDataManager()
+
+    # Fetch hospitals from available data sources
+    hospitals_data = data_manager.fetch_hospitals(target_city)
+
+    # For now, use mock slots (real implementation would fetch from adapters)
     slots_data = load_mock_slots()
-    hospitals_data = load_hospitals()
 
     # Filter slots by department
     filtered_slots = [
@@ -35,12 +47,12 @@ def search_available_slots(task_params: dict) -> dict:
     # Enrich with hospital info
     for slot in filtered_slots:
         hospital_info = next(
-            (h for h in hospitals_data.get("hospitals", [])
-             if h["id"] == slot["hospital_id"]),
+            (h for h in hospitals_data
+             if h.get("hospital_id") == slot.get("hospital_id")),
             {}
         )
         slot["distance_km"] = hospital_info.get("distance_km", 0)
-        slot["travel_time_min"] = hospital_info.get("travel_time_min", 0)
+        slot["travel_time_min"] = hospital_info.get("distance_km", 0) * 2  # Rough estimate
 
     # Sort by travel preference
     filtered_slots = sort_by_preference(filtered_slots, travel_preference)
@@ -50,7 +62,8 @@ def search_available_slots(task_params: dict) -> dict:
         "total_count": len(filtered_slots),
         "search_timestamp": datetime.now().isoformat(),
         "department": department,
-        "time_window": time_window
+        "time_window": time_window,
+        "data_sources": data_manager.get_available_adapters()
     }
 
 
@@ -66,16 +79,6 @@ def load_mock_slots() -> dict:
         return {"available_slots": []}
 
 
-def load_hospitals() -> dict:
-    """Load hospital information from JSON file"""
-    base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    hospitals_file = os.path.join(base_path, "data", "mock", "hospitals.json")
-
-    try:
-        with open(hospitals_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {"hospitals": []}
 
 
 def filter_by_time_window(slots: List[Dict], time_window: str) -> List[Dict]:
