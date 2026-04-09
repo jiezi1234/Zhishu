@@ -20,6 +20,8 @@ After intent understanding extracts the appointment requirements, this skill sea
 
 ## Input
 
+### 方式1: 仅使用任务参数 (本地爬虫/模拟数据)
+
 ```json
 {
   "department": "骨科",
@@ -28,6 +30,29 @@ After intent understanding extracts the appointment requirements, this skill sea
   "travel_preference": "nearby"
 }
 ```
+
+### 方式2: 接收AutoClaw采集的数据 (推荐)
+
+```json
+{
+  "task_params": {
+    "department": "骨科",
+    "target_city": "北京",
+    "time_window": "this_week",
+    "travel_preference": "nearby"
+  },
+  "raw_hospital_data": {
+    "source": "114ygk",
+    "data": "<html>...</html>",
+    "format": "html"
+  }
+}
+```
+
+其中 `raw_hospital_data` 可以是:
+- **source**: "114ygk" | "bjguahao" | "hospital_official"
+- **data**: HTML字符串或JSON对象
+- **format**: "html" | "json"
 
 ## Output
 
@@ -63,9 +88,50 @@ After intent understanding extracts the appointment requirements, this skill sea
 
 ## Data Sources
 
-- **Mock Data**: `data/mock/available_slots.json` (for demo)
-- **Real APIs**: Hospital-specific adapters (future)
-- **Web Scraping**: Selenium-based crawlers (future)
+### 优先级顺序
+
+1. **AutoClaw采集的数据** (最优)
+   - 真实网页数据
+   - 由AutoClaw浏览器采集
+   - 格式: HTML或JSON
+
+2. **114挂号网爬虫** (备选)
+   - 本地Playwright爬虫
+   - 自动反爬虫对策
+   - 格式: HTML
+
+3. **模拟数据** (降级)
+   - 始终可用
+   - 用于测试和演示
+   - 格式: JSON
+
+### 如何使用AutoClaw采集的数据
+
+1. **AutoClaw浏览器采集**
+   ```python
+   browser = await playwright.chromium.launch()
+   page = await browser.new_page()
+   await page.goto("https://www.114ygk.com/")
+   html_data = await page.content()
+   ```
+
+2. **传递给Skill 2**
+   ```python
+   result = call_skill("healthpath-hospital-crawler", {
+       "task_params": task_params,
+       "raw_hospital_data": {
+           "source": "114ygk",
+           "data": html_data,
+           "format": "html"
+       }
+   })
+   ```
+
+3. **Skill 2分析数据**
+   - 使用BeautifulSoup解析HTML
+   - 提取医院、医生、时间、费用等信息
+   - 标准化为统一格式
+   - 返回slots列表
 
 ## Error Handling
 
