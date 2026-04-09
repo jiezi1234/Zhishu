@@ -10,6 +10,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Import cache manager
+try:
+    from cache_manager import get_cache_manager
+    CACHE_AVAILABLE = True
+except ImportError:
+    CACHE_AVAILABLE = False
+
 
 class HospitalDataAdapter(ABC):
     """Base class for hospital data adapters"""
@@ -127,19 +134,43 @@ class YiHaoAdapter(HospitalDataAdapter):
     def __init__(self):
         super().__init__("114挂号网")
         self.base_url = "https://www.114ygk.com"
-        # Note: 114 doesn't have official API, requires web scraping
+        # Import scraper here to avoid circular imports
+        try:
+            from yihao_scraper import fetch_hospitals_sync, fetch_slots_sync
+            self.fetch_hospitals_impl = fetch_hospitals_sync
+            self.fetch_slots_impl = fetch_slots_sync
+            self.is_available = True
+        except ImportError:
+            logger.warning("yihao_scraper not available, 114 adapter disabled")
+            self.is_available = False
 
     def fetch_hospitals(self, city: str = "北京") -> List[Dict]:
-        """Fetch hospitals from 114 platform"""
-        # TODO: Implement web scraping with Playwright
-        logger.info("Fetching hospitals from 114挂号网")
-        return []
+        """Fetch hospitals from 114 platform using web scraper"""
+        if not self.is_available:
+            return []
+
+        try:
+            logger.info(f"Fetching hospitals from 114挂号网 for {city}")
+            hospitals = self.fetch_hospitals_impl(city)
+            return hospitals
+        except Exception as e:
+            logger.error(f"Error fetching hospitals from 114: {e}")
+            self.is_available = False
+            return []
 
     def fetch_available_slots(self, hospital_id: str, department: str, date_range: tuple) -> List[Dict]:
-        """Fetch available slots from 114 platform"""
-        # TODO: Implement web scraping with Playwright
-        logger.info(f"Fetching slots from 114挂号网 for {hospital_id}/{department}")
-        return []
+        """Fetch available slots from 114 platform using web scraper"""
+        if not self.is_available:
+            return []
+
+        try:
+            logger.info(f"Fetching slots from 114挂号网 for {hospital_id}/{department}")
+            slots = self.fetch_slots_impl(hospital_id, department, date_range)
+            return slots
+        except Exception as e:
+            logger.error(f"Error fetching slots from 114: {e}")
+            self.is_available = False
+            return []
 
 
 class MockDataAdapter(HospitalDataAdapter):
@@ -213,6 +244,7 @@ class HospitalDataManager:
 
     def __init__(self):
         self.adapters: List[HospitalDataAdapter] = []
+        self.cache = get_cache_manager() if CACHE_AVAILABLE else None
         self._init_adapters()
 
     def _init_adapters(self):
@@ -233,11 +265,22 @@ class HospitalDataManager:
         """
         Fetch hospitals from available adapters.
         Returns data from first successful adapter.
+        Uses cache to reduce network requests.
         """
+        # Try cache first
+        if self.cache:
+            cached = self.cache.get_hospitals(city)
+            if cached:
+                return cached
+
+        # Fetch from adapters
         for adapter in self.adapters:
             hospitals = adapter.get_hospitals(city)
             if hospitals:
                 logger.info(f"Successfully fetched hospitals from {adapter.name}")
+                # Cache the result
+                if self.cache:
+                    self.cache.set_hospitals(city, hospitals, ttl_hours=24)
                 return hospitals
 
         logger.warning("All adapters failed, returning empty list")
@@ -247,11 +290,22 @@ class HospitalDataManager:
         """
         Fetch available slots from available adapters.
         Returns data from first successful adapter.
+        Uses cache to reduce network requests.
         """
+        # Try cache first
+        if self.cache:
+            cached = self.cache.get_slots(hospital_id, department)
+            if cached:
+                return cached
+
+        # Fetch from adapters
         for adapter in self.adapters:
             slots = adapter.get_available_slots(hospital_id, department, date_range)
             if slots:
                 logger.info(f"Successfully fetched slots from {adapter.name}")
+                # Cache the result (shorter TTL for slots)
+                if self.cache:
+                    self.cache.set_slots(hospital_id, department, slots, ttl_hours=1)
                 return slots
 
         logger.warning("All adapters failed, returning empty list")
@@ -260,3 +314,9 @@ class HospitalDataManager:
     def get_available_adapters(self) -> List[str]:
         """Get list of currently available adapters"""
         return [adapter.name for adapter in self.adapters if adapter.is_available]
+
+    def get_cache_stats(self) -> Dict:
+        """Get cache statistics"""
+        if self.cache:
+            return self.cache.get_cache_stats()
+        return {"error": "Cache not available"}
