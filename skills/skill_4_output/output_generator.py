@@ -8,17 +8,16 @@ from typing import Dict, List
 sys.path.insert(0, os.path.dirname(__file__))
 
 from pdf_generator import generate_pdf_document
-from excel_generator import generate_excel_document
 
 
-def generate_output(recommendations: List[Dict], task_params: Dict, output_format: str = "excel") -> dict:
+def generate_output(recommendations: List[Dict], task_params: Dict, output_format: str = "large_font_pdf") -> dict:
     """
-    Generate formatted output documents.
+    Generate formatted output documents (PDF only).
 
     Args:
         recommendations: Ranked recommendations from Skill 3
         task_params: Original task parameters
-        output_format: "excel", "pdf", or "large_font_pdf"
+        output_format: "pdf" or "large_font_pdf" (default: large_font_pdf for elderly-friendly)
 
     Returns:
         Dictionary with file paths and generation status
@@ -39,18 +38,12 @@ def generate_output(recommendations: List[Dict], task_params: Dict, output_forma
     }
 
     try:
-        if output_format in ["pdf", "large_font_pdf"]:
-            pdf_path = generate_pdf(recommendations, task_params, output_dir, timestamp, output_format)
-            result["files"]["pdf"] = pdf_path
-        elif output_format == "excel":
-            excel_path = generate_excel(recommendations, task_params, output_dir, timestamp)
-            result["files"]["excel"] = excel_path
-        else:
-            # Default: generate both
-            pdf_path = generate_pdf(recommendations, task_params, output_dir, timestamp, "large_font_pdf")
-            excel_path = generate_excel(recommendations, task_params, output_dir, timestamp)
-            result["files"]["pdf"] = pdf_path
-            result["files"]["excel"] = excel_path
+        # Always generate PDF (large_font_pdf by default for accessibility)
+        if output_format not in ["pdf", "large_font_pdf"]:
+            output_format = "large_font_pdf"
+
+        pdf_path = generate_pdf(recommendations, task_params, output_dir, timestamp, output_format)
+        result["files"]["pdf"] = pdf_path
 
     except Exception as e:
         result["status"] = "error"
@@ -69,19 +62,6 @@ def generate_pdf(recommendations: List[Dict], task_params: Dict, output_dir: str
 
     large_font = format_type == "large_font_pdf"
     generate_pdf_document(recommendations, task_params, filepath, large_font=large_font)
-
-    return filepath
-
-
-def generate_excel(recommendations: List[Dict], task_params: Dict, output_dir: str, timestamp: str) -> str:
-    """
-    Generate Excel document using openpyxl.
-    """
-
-    filename = f"medical_travel_plan_{timestamp}.xlsx"
-    filepath = os.path.join(output_dir, filename)
-
-    generate_excel_document(recommendations, task_params, filepath)
 
     return filepath
 
@@ -109,5 +89,5 @@ if __name__ == "__main__":
         "symptom": "腰疼"
     }
 
-    result = generate_output(test_recommendations, test_task, "excel")
+    result = generate_output(test_recommendations, test_task, "large_font_pdf")
     print(json.dumps(result, ensure_ascii=False, indent=2))
