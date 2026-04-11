@@ -37,6 +37,46 @@ Zhishu-Agent/
 - AutoClaw 框架（已配置）
 - DeepSeek API Key
 
+### 在 AutoClaw 中使用
+
+#### 1. 安装 Skill
+
+Zhishu Agent 已作为 AutoClaw Skill 注册。Skills 位置：
+
+```
+C:\Users\Administrator\.openclaw-autoclaw\skills\
+├── healthpath-agent/              # 主智能体
+├── healthpath-intent-understanding/
+├── healthpath-hospital-crawler/
+├── healthpath-decision-engine/
+└── healthpath-output-generator/
+```
+
+#### 2. 启动 AutoClaw
+
+打开 AutoClaw 桌面应用或网页版（`http://127.0.0.1:18789`）
+
+#### 3. 调用智能体
+
+在 AutoClaw 聊天框中输入就医需求，例如：
+
+```
+调用healthpath-agent，我想在北京找个好医院看骨科，最好这周能挂上号。
+```
+
+或直接描述需求（AutoClaw 会自动识别）：
+
+```
+我奶奶腰疼，想找个医院看骨科，生成一份大字版的就医行程单。
+```
+
+#### 4. 获取结果
+
+AutoClaw 会返回：
+- 推荐医院方案（Top-2）
+- 就医行程单（PDF 或 Excel）
+- 交通和时间建议
+
 ### 运行集成测试
 
 ```bash
@@ -102,24 +142,40 @@ python tests/test_integration.py
 
 ### 场景 A：银发族陪诊
 
+**在 AutoClaw 中输入：**
 ```
-输入："老人这两天腰疼，帮我找本周可挂上的骨科号，并做一份大字版行程单。"
-输出：可执行挂号建议 + 大字版 PDF
+我奶奶这两天腰疼，帮我找本周可挂上的骨科号，并做一份大字版行程单。
 ```
+
+**AutoClaw 返回：**
+- 推荐医院方案（距离、排队时间、费用综合评分）
+- 大字版 PDF 行程单（16pt+ 字体，高对比度）
+- 挂号链接和交通建议
 
 ### 场景 B：职场人夜间/周末就医
 
+**在 AutoClaw 中输入：**
 ```
-输入："我在南山区上班，只能周末看颈椎，帮我找最近且排队短的医院。"
-输出：距离与时长最优方案 + 交通建议
+我在南山区上班，只能周末看颈椎，帮我找最近且排队短的医院。
 ```
+
+**AutoClaw 返回：**
+- 距离与时长最优方案
+- 周末可挂号的医生列表
+- 交通路线和预计时间
 
 ### 场景 C：异地医旅一体化
 
+**在 AutoClaw 中输入：**
 ```
-输入："下周从赣州去广州看呼吸科，帮我把挂号、车票、住宿一起规划。"
-输出：一体化医旅路书 Excel + 行程提醒
+下周从赣州去广州看呼吸科，帮我把挂号、车票、住宿一起规划。
 ```
+
+**AutoClaw 返回：**
+- 一体化医旅路书 Excel
+- 推荐医院和医生
+- 交通方案和住宿建议
+- 行程提醒
 
 ## 运行演示
 
@@ -132,6 +188,48 @@ python tests/test_integration.py
 ## 注册 AutoClaw Skills
   
 python config/autoclaw_integration.py
+
+## AutoClaw 配置说明
+
+### 配置文件位置
+
+```
+C:\Users\Administrator\.openclaw-autoclaw\openclaw.json
+```
+
+### 关键配置
+
+```json
+{
+  "skills": {
+    "allowBundled": [
+      "healthpath-agent",
+      "healthpath-intent-understanding",
+      "healthpath-hospital-crawler",
+      "healthpath-decision-engine",
+      "healthpath-output-generator"
+    ]
+  },
+  "tools": {
+    "fs": {
+      "workspaceOnly": false
+    }
+  }
+}
+```
+
+- `allowBundled`：允许加载的 Skill 列表
+- `workspaceOnly: false`：允许 Agent 访问工作区外的文件（包括 Skills 目录）
+
+### 故障排查
+
+**问题：AutoClaw 说"healthpath-agent 不可用"**
+
+解决方案：
+1. 确认 `openclaw.json` 中 `allowBundled` 包含 `healthpath-agent`
+2. 确认 `workspaceOnly` 设置为 `false`
+3. 重启 AutoClaw 应用
+4. 检查 Gateway 日志：`~/.openclaw-autoclaw/logs/gateway.log`
 
 ## 查看使用指南
 

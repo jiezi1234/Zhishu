@@ -1,4 +1,4 @@
-"""
+﻿"""
 114挂号网爬虫实现
 使用Playwright进行浏览器自动化，BeautifulSoup解析HTML
 """
@@ -12,10 +12,14 @@ import time
 
 try:
     from playwright.async_api import async_playwright, Browser, Page
-    from bs4 import BeautifulSoup
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 logger = logging.getLogger(__name__)
 
