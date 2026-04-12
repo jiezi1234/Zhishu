@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
+
+# 缓存 & 输出
+cache/
+output/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试覆盖率
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# 系统文件
+.DS_Store
+Thumbs.db

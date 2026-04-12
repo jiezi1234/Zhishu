@@ -226,7 +226,7 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict, output
 
         comparison_table = Table(comparison_data, colWidths=[0.5*inch, 1.2*inch, 0.8*inch, 0.8*inch, 1.0*inch, 0.6*inch, 0.6*inch, 0.6*inch, 0.6*inch])
         comparison_table.setStyle(TableStyle([
-            ('FONT', (0, 0), (-1, 0), chinese_font, table_size, 'bold'),
+            ('FONT', (0, 0), (-1, 0), chinese_font, table_size),
             ('FONT', (0, 1), (-1, -1), chinese_font, table_size),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#FF6B6B')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -261,7 +261,7 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict, output
 
         travel_table = Table(travel_data, colWidths=[1.5*inch, 0.8*inch, 1.0*inch, 1.2*inch, 1.5*inch])
         travel_table.setStyle(TableStyle([
-            ('FONT', (0, 0), (-1, 0), chinese_font, table_size, 'bold'),
+            ('FONT', (0, 0), (-1, 0), chinese_font, table_size),
             ('FONT', (0, 1), (-1, -1), chinese_font, table_size),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
