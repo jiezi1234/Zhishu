@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "Bash(python csv_to_json.py)",
+      "Bash(python skills/hospital_matcher/hospital_matcher.py)",
+      "Bash(grep:*)",
+      "Bash(pip install:*)",
+      "Bash(npx --version)",
+      "Bash(npx clawhub:*)",
+      "Bash(nvm --version)",
+      "Bash(where node:*)",
+      "Read(//c/Program Files/**)",
+      "Bash(winget --version)",
+      "Bash(choco --version)",
+      "Bash(choco install:*)",
+      "Bash(winget install:*)",
+      "Bash(winget search:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(powershell -Command \"[System.Environment]::SetEnvironmentVariable\\('BAIDU_MAP_AUTH_TOKEN', 'sk-ap-Fg3fzRn5P7SfkyG38kdJ4KtI4NQ3DCHxDQ6iqUJYWp1J3JUFRhUYJWtaFGs4VoPY', 'User'\\)\")",
+      "Bash(export BAIDU_MAP_AUTH_TOKEN=\"sk-ap-Fg3fzRn5P7SfkyG38kdJ4KtI4NQ3DCHxDQ6iqUJYWp1J3JUFRhUYJWtaFGs4VoPY\")",
+      "Bash(curl -s --get https://api.map.baidu.com/agent_plan/v1/geocoding -H 'Authorization: Bearer sk-ap-Fg3fzRn5P7SfkyG38kdJ4KtI4NQ3DCHxDQ6iqUJYWp1J3JUFRhUYJWtaFGs4VoPY' --data-urlencode address=北京市海淀区中关村南大街 --data-urlencode region=北京市)",
+      "Bash(curl -s -X POST https://api.map.baidu.com/agent_plan/v1/direction -H 'Authorization: Bearer sk-ap-Fg3fzRn5P7SfkyG38kdJ4KtI4NQ3DCHxDQ6iqUJYWp1J3JUFRhUYJWtaFGs4VoPY' -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode user_raw_request=从北京市海淀区中关村南大街坐公交去北京市海淀区西苑操场1号 --data-urlencode location=39.952940,116.323747)",
+      "Bash(powershell -Command \"[System.Environment]::GetEnvironmentVariable\\('BAIDU_MAP_AUTH_TOKEN', 'User'\\)\")",
+      "Bash(python:*)",
+      "WebFetch(domain:www.yixue.com)"
+    ]
+  }
+}

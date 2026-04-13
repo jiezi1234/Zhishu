@@ -1,314 +1,289 @@
 """
-HealthPath Agent - Main Skill for AutoClaw Integration
-协调所有子Skill的执行，从用户输入到PDF生成的完整流程
+main_skill.py — HealthPath Agent 主入口
+
+协调四个子 Skill 的执行，完成「症状输入 → 就医行程单」全链路：
+
+  symptom_triage       病情预判与科室推荐
+  hospital_matcher     附近医院匹配
+  registration_fetcher 挂号信息采集
+  itinerary_builder    路线规划与行程单生成
+
+AutoClaw 调用方式：
+  from main_skill import execute
+  result = execute(user_input="老人头晕失眠，在朝阳区望京")
+
+返回结构：
+  {
+    "status":       "success" | "need_more_info" | "error",
+    "steps":        { "triage": {...}, "match": {...}, "registration": {...}, "itinerary": {...} },
+    "final_output": { "pdf_path": "...", "depart_time": "..." },
+    "follow_up":    [...],   # 若需要追问则非空
+    "error":        null | str
+  }
 """
 
 import sys
 import os
 import json
-from typing import Dict, Any
 import logging
+from typing import Dict, Any, Optional
 
-# 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# 添加Skills路径
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(project_root, "skills", "skill_1_intent"))
-sys.path.insert(0, os.path.join(project_root, "skills", "skill_2_crawl"))
-sys.path.insert(0, os.path.join(project_root, "skills", "skill_3_decision"))
-sys.path.insert(0, os.path.join(project_root, "skills", "skill_4_output"))
+# ── Skill 路径注入 ────────────────────────────────────────────────────────
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+for skill_dir in ["symptom_triage", "hospital_matcher",
+                  "registration_fetcher", "itinerary_builder"]:
+    sys.path.insert(0, os.path.join(_ROOT, "skills", skill_dir))
 
-# 导入各个Skill
-from intent_parser import parse_intent
-from hospital_crawler import search_available_slots
-from decision_engine import evaluate_and_rank
-from output_generator import generate_output
+from symptom_triage      import triage
+from hospital_matcher    import match
+from registration_fetcher import fetch
+from itinerary_builder   import build
 
 
 class HealthPathAgent:
-    """HealthPath Agent - 医疗就诊路线规划智能体"""
+    """HealthPath Agent — 智能就医调度智能体"""
 
-    def __init__(self):
-        self.name = "HealthPath Agent"
-        self.version = "1.0.0"
-        self.description = "智能医疗就诊路线规划系统，帮助用户找到最合适的医院和医生"
+    name        = "HealthPath Agent"
+    version     = "2.0.0"
+    description = "从症状描述到就医行程单的一站式智能就医调度助手"
 
-    def execute(self, user_input: str, output_format: str = "large_font_pdf") -> Dict[str, Any]:
+    # ── 主流程 ────────────────────────────────────────────────────────────
+
+    def execute(self,
+                user_input: str,
+                user_location: Optional[str] = None,
+                selected_hospital: Optional[str] = None,
+                extra_answers: Optional[dict] = None,
+                output_format: str = "large_font_pdf",
+                user_profile: Optional[dict] = None) -> Dict[str, Any]:
         """
-        执行完整的医疗就诊规划流程
+        执行完整就医调度流程。
 
-        Args:
-            user_input: 用户的自然语言输入
-            output_format: 输出格式 ("pdf" 或 "large_font_pdf")
+        Parameters
+        ----------
+        user_input        : 用户自然语言描述（症状/就医需求）
+        user_location     : 用户当前地址；若为 None 则在分诊后询问
+        selected_hospital : 用户已选择的医院名称；若为 None 则展示候选列表
+        extra_answers     : 对分诊追问的回答 {question_id: answer}
+        output_format     : "large_font_pdf"（老年版）| "pdf"（标准版）
+        user_profile      : {"age_group": "elderly"|"adult"|"child"}
 
-        Returns:
-            包含结果的字典
+        Returns
+        -------
+        dict — 见模块级文档
         """
-        logger.info(f"开始处理用户输入: {user_input}")
-
-        result = {
-            "status": "success",
-            "steps": {},
-            "final_output": None,
-            "error": None
-        }
+        logger.info(f"[HealthPath] 开始处理: {user_input[:60]}")
+        result = {"status": "success", "steps": {}, "final_output": None,
+                  "follow_up": [], "error": None}
 
         try:
-            # Step 1: 意图解析
-            logger.info("[Step 1] 解析用户意图...")
-            intent_result = self._step1_parse_intent(user_input)
-            if not intent_result["success"]:
-                result["status"] = "error"
-                result["error"] = intent_result["error"]
+            # ── Step 1: 症状分诊 ──────────────────────────────────────
+            logger.info("[Step 1] 病情预判 / 科室推荐 ...")
+            triage_result = triage(
+                symptom_text=user_input,
+                user_profile=user_profile,
+                extra_answers=extra_answers,
+            )
+            result["steps"]["triage"] = triage_result
+
+            # 若有危急警示，优先提醒
+            if triage_result["warning_flags"]:
+                result["status"] = "emergency_warning"
+                result["final_output"] = {
+                    "warning": triage_result["warning_flags"],
+                    "message": "检测到危急症状，建议立即就近急诊或拨打 120！",
+                }
                 return result
 
-            task_params = intent_result["task_params"]
-            result["steps"]["intent_parsing"] = intent_result
-
-            # Step 2: 号源搜索
-            logger.info("[Step 2] 搜索可用号源...")
-            search_result = self._step2_search_slots(task_params)
-            if not search_result["success"]:
-                result["status"] = "error"
-                result["error"] = search_result["error"]
+            # 若信息不足，返回追问列表
+            if triage_result["need_more_info"]:
+                result["status"] = "need_more_info"
+                result["follow_up"] = triage_result["follow_up_questions"]
                 return result
 
-            slots = search_result["slots"]
-            result["steps"]["hospital_search"] = search_result
+            departments = triage_result["recommended_departments"]
+            logger.info(f"  推荐科室: {departments}")
 
-            # 检查是否找到号源
-            if not slots:
-                logger.warning("未找到匹配的号源")
-                result["status"] = "no_results"
-                result["error"] = "未找到匹配的号源"
-                # 仍然生成PDF，但显示"未找到"
-                recommendations = []
-            else:
-                # Step 3: 方案决策
-                logger.info("[Step 3] 评分和排序...")
-                decision_result = self._step3_rank_recommendations(slots, task_params)
-                if not decision_result["success"]:
-                    result["status"] = "error"
-                    result["error"] = decision_result["error"]
-                    return result
-
-                recommendations = decision_result["recommendations"]
-                result["steps"]["decision_ranking"] = decision_result
-
-            # Step 4: 输出生成
-            logger.info("[Step 4] 生成PDF文档...")
-            output_result = self._step4_generate_output(recommendations, task_params, output_format)
-            if not output_result["success"]:
-                result["status"] = "error"
-                result["error"] = output_result["error"]
+            # ── Step 2: 需要用户地址 ─────────────────────────────────
+            if not user_location:
+                result["status"] = "need_location"
+                result["follow_up"] = [{
+                    "id": "location",
+                    "question": "请告诉我您当前的地址或所在区域（如：朝阳区望京街道），以便为您查找附近医院。"
+                }]
+                result["steps"]["triage"] = triage_result
                 return result
 
-            result["final_output"] = output_result
-            result["steps"]["output_generation"] = output_result
+            # ── Step 3: 医院匹配 ─────────────────────────────────────
+            logger.info("[Step 2] 查找附近医院 ...")
+            match_result = match(
+                user_location=user_location,
+                departments=departments,
+                preferences=_extract_preferences(user_input, user_profile),
+            )
+            result["steps"]["match"] = match_result
 
-            logger.info("✓ 流程完成")
+            candidates = match_result["candidates"]
+            if not candidates:
+                result["status"] = "no_hospitals_found"
+                result["error"] = "附近未找到符合条件的医院，请尝试放宽条件或修改位置"
+                return result
+
+            # 若用户尚未选择医院，返回候选列表供选择
+            if not selected_hospital:
+                result["status"] = "awaiting_hospital_selection"
+                result["final_output"] = {
+                    "candidates": candidates,
+                    "message": "以下是附近医院候选，请告知您选择哪一家：",
+                }
+                return result
+
+            # ── Step 4: 挂号信息采集 ─────────────────────────────────
+            logger.info(f"[Step 3] 采集挂号信息: {selected_hospital} ...")
+            hospital_info = next(
+                (h for h in candidates if h["hospital_name"] == selected_hospital),
+                {"hospital_name": selected_hospital, "address": "", "yixue_url": ""}
+            )
+            reg_result = fetch(
+                hospital_name=selected_hospital,
+                department=departments[0],
+                yixue_url=hospital_info.get("yixue_url"),
+            )
+            result["steps"]["registration"] = reg_result
+            logger.info(f"  挂号链接: {reg_result.get('registration_url')}")
+
+            # ── Step 5: 行程单生成（用户表示已挂号后调用）────────────
+            logger.info("[Step 4] 生成就医行程单 ...")
+            itinerary_result = build(
+                user_location=user_location,
+                hospital_name=selected_hospital,
+                hospital_address=hospital_info.get("address", ""),
+                department=departments[0],
+                registration_info=reg_result,
+                output_format=output_format,
+                user_profile=user_profile,
+            )
+            result["steps"]["itinerary"] = itinerary_result
+            result["final_output"]  = {
+                "pdf_path":    itinerary_result["pdf_path"],
+                "depart_time": itinerary_result["depart_time"],
+                "route":       itinerary_result["route_summary"],
+                "registration_url": reg_result.get("registration_url"),
+            }
+
+            logger.info("✓ 全流程完成")
             return result
 
         except Exception as e:
+            import traceback
             logger.error(f"✗ 执行失败: {e}")
             result["status"] = "error"
-            result["error"] = str(e)
-            import traceback
+            result["error"]  = str(e)
             result["traceback"] = traceback.format_exc()
             return result
 
-    def _step1_parse_intent(self, user_input: str) -> Dict[str, Any]:
-        """Step 1: 解析用户意图"""
-        try:
-            intent_result = parse_intent(user_input)
-            task_params = intent_result.get("task_params", {})
-
-            logger.info(f"  科室: {task_params.get('department', '未指定')}")
-            logger.info(f"  症状: {task_params.get('symptom', '未指定')}")
-            logger.info(f"  时间: {task_params.get('time_window', '未指定')}")
-            logger.info(f"  偏好: {task_params.get('travel_preference', '未指定')}")
-
-            return {
-                "success": True,
-                "task_params": task_params,
-                "raw_result": intent_result
-            }
-        except Exception as e:
-            logger.error(f"  意图解析失败: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-    def _step2_search_slots(self, task_params: Dict) -> Dict[str, Any]:
-        """Step 2: 搜索可用号源"""
-        try:
-            search_result = search_available_slots(task_params)
-            slots = search_result.get("slots", [])
-            data_sources = search_result.get("data_sources", [])
-
-            logger.info(f"  找到 {len(slots)} 个号源")
-            logger.info(f"  数据来源: {', '.join(data_sources)}")
-
-            return {
-                "success": True,
-                "slots": slots,
-                "total_count": len(slots),
-                "data_sources": data_sources,
-                "raw_result": search_result
-            }
-        except Exception as e:
-            logger.error(f"  号源搜索失败: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-    def _step3_rank_recommendations(self, slots: list, task_params: Dict) -> Dict[str, Any]:
-        """Step 3: 评分和排序"""
-        try:
-            decision_result = evaluate_and_rank(slots, task_params)
-            recommendations = decision_result.get("recommendations", [])
-
-            logger.info(f"  生成 {len(recommendations)} 个推荐方案")
-            if recommendations:
-                best = recommendations[0]
-                logger.info(f"  最优方案: {best.get('hospital_name')} - {best.get('doctor_name')}")
-                logger.info(f"  评分: {best.get('score')}/10")
-
-            return {
-                "success": True,
-                "recommendations": recommendations,
-                "count": len(recommendations),
-                "raw_result": decision_result
-            }
-        except Exception as e:
-            logger.error(f"  方案决策失败: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-    def _step4_generate_output(self, recommendations: list, task_params: Dict, output_format: str) -> Dict[str, Any]:
-        """Step 4: 生成输出文档"""
-        try:
-            output_result = generate_output(recommendations, task_params, output_format)
-
-            if output_result.get("status") == "success":
-                pdf_path = output_result.get("files", {}).get("pdf", "")
-                file_size = os.path.getsize(pdf_path) / 1024 if os.path.exists(pdf_path) else 0
-
-                logger.info(f"  PDF生成成功: {os.path.basename(pdf_path)}")
-                logger.info(f"  文件大小: {file_size:.1f} KB")
-
-                return {
-                    "success": True,
-                    "pdf_path": pdf_path,
-                    "file_size_kb": file_size,
-                    "raw_result": output_result
-                }
-            else:
-                error = output_result.get("error", "未知错误")
-                logger.error(f"  PDF生成失败: {error}")
-                return {
-                    "success": False,
-                    "error": error
-                }
-
-        except Exception as e:
-            logger.error(f"  输出生成失败: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
     def get_info(self) -> Dict[str, Any]:
-        """获取智能体信息"""
         return {
-            "name": self.name,
-            "version": self.version,
-            "description": self.description,
-            "capabilities": [
-                "自然语言理解",
-                "医院号源搜索",
-                "多维度评分排序",
-                "PDF文档生成"
-            ]
+            "name":         self.name,
+            "version":      self.version,
+            "description":  self.description,
+            "skills": [
+                "symptom_triage      — 病情预判与科室推荐",
+                "hospital_matcher    — 附近医院匹配（CSV + 百度地图）",
+                "registration_fetcher — 医院挂号信息采集",
+                "itinerary_builder   — 路线规划与 PDF 行程单生成",
+            ],
         }
 
 
-# 全局实例
-_agent = None
+# ── 偏好提取辅助 ──────────────────────────────────────────────────────────
+
+def _extract_preferences(text: str, profile: Optional[dict]) -> dict:
+    """从用户输入提取出行/医院偏好"""
+    prefs = {"hospital_level": "三甲", "max_distance_km": 15}
+    if "最近" in text or "近的" in text:
+        prefs["max_distance_km"] = 8
+    if "周末" in text:
+        prefs["time_window"] = "weekend"
+    if profile and profile.get("age_group") == "elderly":
+        prefs["max_distance_km"] = 10  # 老年人不宜走太远
+    return prefs
 
 
-def get_agent() -> HealthPathAgent:
-    """获取全局智能体实例"""
+# ── 全局单例 & 公开接口 ───────────────────────────────────────────────────
+
+_agent: Optional[HealthPathAgent] = None
+
+
+def _get_agent() -> HealthPathAgent:
     global _agent
     if _agent is None:
         _agent = HealthPathAgent()
     return _agent
 
 
-def execute(user_input: str, output_format: str = "large_font_pdf") -> Dict[str, Any]:
+def execute(user_input: str, **kwargs) -> Dict[str, Any]:
     """
-    AutoClaw调用的主入口函数
+    AutoClaw 调用的主入口。
 
-    Args:
-        user_input: 用户输入
-        output_format: 输出格式
-
-    Returns:
-        执行结果
+    常用 kwargs:
+      user_location     str   用户地址
+      selected_hospital str   用户选定的医院名称
+      extra_answers     dict  对追问的回答
+      output_format     str   "large_font_pdf" | "pdf"
+      user_profile      dict  {"age_group": "elderly"|"adult"|"child"}
     """
-    agent = get_agent()
-    return agent.execute(user_input, output_format)
+    return _get_agent().execute(user_input=user_input, **kwargs)
 
 
 def get_info() -> Dict[str, Any]:
-    """获取智能体信息"""
-    agent = get_agent()
-    return agent.get_info()
+    return _get_agent().get_info()
 
+
+# ── CLI 快速测试 ──────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # 测试
-    print("\n" + "="*70)
-    print("HealthPath Agent - 测试")
-    print("="*70 + "\n")
+    print("\n" + "=" * 65)
+    print("  HealthPath Agent v2.0 — 快速测试")
+    print("=" * 65)
 
     agent = HealthPathAgent()
+    info  = agent.get_info()
+    print(f"\n{info['name']} v{info['version']}")
+    for s in info["skills"]:
+        print(f"  · {s}")
 
-    # 显示智能体信息
-    info = agent.get_info()
-    print(f"智能体: {info['name']}")
-    print(f"版本: {info['version']}")
-    print(f"描述: {info['description']}")
-    print(f"能力: {', '.join(info['capabilities'])}\n")
+    # ── 场景 A：老年人头晕 ────────────────────────────────────────────
+    print("\n\n── 场景 A：老年人头晕 ──")
+    r = agent.execute(
+        user_input="老人头晕失眠两周了，有时耳鸣",
+        user_profile={"age_group": "elderly"},
+    )
+    print(f"状态: {r['status']}")
+    if r["status"] == "need_location":
+        print("追问:", r["follow_up"][0]["question"])
 
-    # 测试用例
-    test_input = "我想在北京找个好医院看骨科，最好这周能挂上号"
-    print(f"用户输入: {test_input}\n")
+    # ── 场景 B：完整流程 ──────────────────────────────────────────────
+    print("\n\n── 场景 B：完整流程（含位置+选院）──")
+    r2 = agent.execute(
+        user_input="最近腰疼，想看骨科，这周能挂上最好",
+        user_location="北京市朝阳区望京街道",
+        selected_hospital="北京协和医院",
+        output_format="large_font_pdf",
+        user_profile={"age_group": "adult"},
+    )
+    print(f"状态: {r2['status']}")
+    if r2.get("final_output"):
+        fo = r2["final_output"]
+        if "pdf_path" in fo:
+            print(f"PDF: {fo['pdf_path']}")
+            print(f"出发时间: {fo['depart_time']}")
+            print(f"挂号链接: {fo['registration_url']}")
 
-    # 执行
-    result = agent.execute(test_input)
-
-    # 显示结果
-    print(f"\n执行状态: {result['status']}")
-    if result['status'] == 'success':
-        output = result.get('final_output', {})
-        if output.get('success'):
-            print(f"PDF路径: {output.get('pdf_path')}")
-            print(f"文件大小: {output.get('file_size_kb'):.1f} KB")
-    elif result['status'] == 'error':
-        print(f"错误: {result['error']}")
-    else:
-        print(f"状态: {result['status']}")
-        if result.get('error'):
-            print(f"信息: {result['error']}")
-
-    print("\n" + "="*70)
+    print("\n" + "=" * 65)

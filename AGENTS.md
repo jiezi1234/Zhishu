@@ -186,17 +186,7 @@ Skills provide your tools. Check each skill's `SKILL.md` when you need one. Keep
 
 #### 医疗相关任务（关键词：医院、挂号、就医、看医生、医疗咨询）
 
-**必须按此顺序使用 HealthPath 工作流：**
-
-1. **healthpath-intent-understanding** — 解析用户自然语言，提取结构化参数（科室、症状、时间窗口、预算等）
-2. **healthpath-hospital-crawler** — 基于任务参数搜索多家医院的可用号源
-3. **healthpath-decision-engine** — 根据距离、费用、排队时间等多维度评分并排序推荐
-4. **healthpath-output-generator** — 生成格式化输出（PDF 行程单、Excel 等）
-
-**禁止做法：**
-- ❌ 不要跳过 intent-understanding 直接爬号源
-- ❌ 不要直接推荐第一个号源，必须用 decision-engine 评分排序
-- ❌ 不要用通用浏览器爬医院官网，用 hospital-crawler
+**详见 `SKILL_PREFERENCES.md`**（五步工作流、各 skill 触发条件、决策速查表、禁止做法）。
 
 #### 其他 skill 使用优先级
 
