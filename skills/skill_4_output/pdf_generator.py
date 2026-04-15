@@ -1,13 +1,21 @@
 """
-pdf_generator.py — 现代卡片风 PDF 生成器 (v2)
+pdf_generator.py — 现代卡片风 PDF 生成器 (v3)
 
 架构：ReportLab Canvas + Platypus 混合
   - 每个信息板块 = 独立 Flowable 子类
   - 页眉/页脚 = onPage 钩子（Canvas 绘制）
   - 圆角卡片背景 = 每个 Flowable.draw() 内调用 canvas.roundRect()
+
+卡片顺序：
+  1. 就诊信息（医院/科室/医生/时间/排队）
+  2. 路线规划（真实路线+地图链接+出发时间）
+  3. 挂号链接（官网+平台+注意事项）
+  4. 就医方案（院内导引步骤）
+  5. 出行清单（定制化物品清单）
+  6. 医院对比表
 """
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional
 
 try:
@@ -27,24 +35,25 @@ except ImportError:
 # ── 颜色系统 ──────────────────────────────────────────────────────────────
 if REPORTLAB_AVAILABLE:
     COLORS = {
-        'primary':        colors.HexColor('#2563EB'),  # 主色：卡片边框/表头/时间轴线
-        'card_bg':        colors.HexColor('#EFF6FF'),  # 卡片背景
-        'text':           colors.HexColor('#1E293B'),  # 正文
-        'text_secondary': colors.HexColor('#64748B'),  # 标签/次要
-        'timeline_node':  colors.HexColor('#10B981'),  # 时间轴节点绿色
-        'divider':        colors.HexColor('#E2E8F0'),  # 分隔线
+        'primary':        colors.HexColor('#2563EB'),
+        'card_bg':        colors.HexColor('#EFF6FF'),
+        'text':           colors.HexColor('#1E293B'),
+        'text_secondary': colors.HexColor('#64748B'),
+        'divider':        colors.HexColor('#E2E8F0'),
         'white':          colors.white,
-        'table_alt':      colors.HexColor('#F8FAFC'),  # 表格偶数行
+        'table_alt':      colors.HexColor('#F8FAFC'),
+        'green':          colors.HexColor('#10B981'),
+        'orange':         colors.HexColor('#F59E0B'),
     }
 else:
     COLORS = {}
 
 # ── 卡片尺寸常量 ──────────────────────────────────────────────────────────
-CARD_RADIUS    = 6    # 圆角半径 pt
-CARD_PADDING_H = 14   # 水平内边距 pt
-CARD_PADDING_V = 12   # 垂直内边距 pt
-CARD_LEFT_BORDER = 3  # 左侧蓝色边框宽度 pt
-CARD_SPACING   = 10   # 卡片间距 pt
+CARD_RADIUS      = 6
+CARD_PADDING_H   = 14
+CARD_PADDING_V   = 12
+CARD_LEFT_BORDER = 3
+CARD_SPACING     = 10
 
 
 def register_chinese_fonts() -> Optional[str]:
@@ -68,7 +77,6 @@ def register_chinese_fonts() -> Optional[str]:
 
 # ── 字体尺寸 ──────────────────────────────────────────────────────────────
 class FontSizes:
-    """按 large_font 模式返回对应字号。"""
     def __init__(self, large: bool = False):
         if large:
             self.title         = 18
@@ -84,10 +92,9 @@ class FontSizes:
             self.header_footer = 11
 
 
-# ── 工具：圆角矩形 + 左侧边框 ────────────────────────────────────────────
+# ── 工具函数 ──────────────────────────────────────────────────────────────
 def draw_rounded_rect(canvas, x, y, w, h, r=CARD_RADIUS,
                       fill_color=None, stroke_color=None):
-    """在 canvas 上绘制圆角矩形（左下角坐标系）。"""
     canvas.saveState()
     if fill_color:
         canvas.setFillColor(fill_color)
@@ -103,7 +110,6 @@ def draw_rounded_rect(canvas, x, y, w, h, r=CARD_RADIUS,
 
 
 def draw_left_border(canvas, x, y, h, color=None):
-    """在卡片左侧绘制 3pt 蓝色竖线。"""
     canvas.saveState()
     canvas.setStrokeColor(color or COLORS['primary'])
     canvas.setLineWidth(CARD_LEFT_BORDER)
@@ -113,13 +119,11 @@ def draw_left_border(canvas, x, y, h, color=None):
 
 # ── 页眉/页脚钩子 ─────────────────────────────────────────────────────────
 def _make_page_decorators(font_name: str, fs: 'FontSizes', gen_date: str):
-    """返回 (on_first_page, on_later_pages) 两个钩子函数。"""
     page_w, page_h = A4
     margin_x = 36
 
     def draw_header_footer(canvas, doc):
         canvas.saveState()
-        # 页眉
         header_y = page_h - 28
         canvas.setFont(font_name, fs.header_footer)
         canvas.setFillColor(COLORS['primary'])
@@ -129,7 +133,6 @@ def _make_page_decorators(font_name: str, fs: 'FontSizes', gen_date: str):
         canvas.setStrokeColor(COLORS['divider'])
         canvas.setLineWidth(0.5)
         canvas.line(margin_x, header_y - 6, page_w - margin_x, header_y - 6)
-        # 页脚
         footer_y = 18
         canvas.setStrokeColor(COLORS['divider'])
         canvas.line(margin_x, footer_y + 12, page_w - margin_x, footer_y + 12)
@@ -146,7 +149,6 @@ def _make_page_decorators(font_name: str, fs: 'FontSizes', gen_date: str):
 
 # ── 卡片基类 ──────────────────────────────────────────────────────────────
 class CardFlowable(Flowable):
-    """所有卡片的基类，负责绘制圆角背景和左侧蓝色边框。"""
     def __init__(self, font_name: str, fs: FontSizes):
         super().__init__()
         self.font_name = font_name
@@ -172,7 +174,6 @@ class CardFlowable(Flowable):
         raise NotImplementedError
 
     def _draw_title(self, title: str, card_h: float) -> float:
-        """绘制卡片标题，返回标题文字底部 y 坐标。"""
         self.canv.saveState()
         self.canv.setFont(self.font_name, self.fs.title)
         self.canv.setFillColor(COLORS['primary'])
@@ -181,10 +182,12 @@ class CardFlowable(Flowable):
         self.canv.restoreState()
         return y
 
+    def _x0(self):
+        return CARD_PADDING_H + CARD_LEFT_BORDER + 4
+
 
 # ── 卡片1：就诊信息 ───────────────────────────────────────────────────────
 class InfoCardFlowable(CardFlowable):
-    """就诊信息 Key-Value 网格卡片。"""
     ROWS = [
         ('医  院', 'hospital_name'),
         ('科  室', '_department'),
@@ -205,16 +208,17 @@ class InfoCardFlowable(CardFlowable):
         if key == '_doctor':
             return f"{self.rec.get('doctor_name', '')}  {self.rec.get('doctor_title', '')}".strip()
         if key == '_queue':
-            return f"约 {self.rec.get('queue_estimate_min', '—')} 分钟"
+            q = self.rec.get('queue_estimate_min', '—')
+            return f"约 {q} 分钟" if q != '—' else '—'
         return str(self.rec.get(key, '—'))
 
     def _content_height(self) -> float:
         return self.fs.title + 8 + len(self.ROWS) * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        title_y    = self._draw_title("🏥  就诊信息", card_h)
-        x_label    = CARD_PADDING_H + CARD_LEFT_BORDER + 4
-        x_value    = x_label + 68
+        title_y  = self._draw_title("🏥  就诊信息", card_h)
+        x_label  = self._x0()
+        x_value  = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
         y = title_y - 6
         for i, (label, key) in enumerate(self.ROWS):
@@ -234,102 +238,179 @@ class InfoCardFlowable(CardFlowable):
             y = row_bot
 
 
-# ── 时间解析辅助 ──────────────────────────────────────────────────────────
-def _parse_appointment_time(time_str: str) -> datetime:
-    """解析就诊时间字符串，失败时降级为今天 09:00。"""
-    for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S'):
-        try:
-            return datetime.strptime(str(time_str), fmt)
-        except (ValueError, TypeError):
-            continue
-    now = datetime.now()
-    return now.replace(hour=9, minute=0, second=0, microsecond=0)
+# ── 卡片2：路线规划 ───────────────────────────────────────────────────────
+class RouteCardFlowable(CardFlowable):
+    """真实路线规划卡片：出发时间、交通方式、距离、耗时、地图链接。"""
 
-
-# ── 卡片2：就诊时间轴 ─────────────────────────────────────────────────────
-class TimelineFlowable(CardFlowable):
-    """横向4节点就诊时间轴。"""
-    LABELS = ['出发', '到院', '挂号', '就诊']
-    NODE_R = 5
-    AXIS_H = 44
-
-    def __init__(self, rec: Dict, font_name: str, fs: FontSizes):
+    def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
-        appt_dt = _parse_appointment_time(rec.get('appointment_time', ''))
-        travel  = int(rec.get('total_travel_time_min', 30))
-        self.times = [
-            appt_dt - timedelta(minutes=travel + 30),
-            appt_dt - timedelta(minutes=30),
-            appt_dt - timedelta(minutes=25),
-            appt_dt,
+        self.task_params = task_params
+        self._rows = [
+            ('出发时间', task_params.get('depart_time', '—')),
+            ('交通方式', task_params.get('route_mode', '—')),
+            ('预计距离', f"{task_params.get('route_distance_km', '—')} km"),
+            ('预计用时', f"{task_params.get('route_duration_min', '—')} 分钟"),
+            ('路线说明', task_params.get('route_description', '请使用手机导航前往')),
+            ('导航链接', task_params.get('route_map_url', '—')),
         ]
+        self._row_h = fs.body + 10
 
     def _content_height(self) -> float:
-        return self.fs.title + 8 + (self.fs.label + 4) + self.AXIS_H + (self.fs.label + 4)
+        return self.fs.title + 8 + len(self._rows) * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        title_y = self._draw_title("🕐  就诊时间轴", card_h)
-        x0      = CARD_PADDING_H + CARD_LEFT_BORDER + 4
-        inner_w = card_w - x0 - CARD_PADDING_H
-        xs      = [x0 + inner_w * i / 3 for i in range(4)]
-        axis_y  = title_y - (self.fs.label + 4) - self.AXIS_H / 2
-        # 连线
-        self.canv.saveState()
-        self.canv.setStrokeColor(COLORS['primary'])
-        self.canv.setLineWidth(1.5)
-        self.canv.setDash([5, 3])
-        for i in range(3):
-            self.canv.line(xs[i] + self.NODE_R, axis_y, xs[i+1] - self.NODE_R, axis_y)
-        self.canv.restoreState()
-        # 节点 + 标签 + 时间
-        for x, label, dt in zip(xs, self.LABELS, self.times):
-            self.canv.saveState()
-            self.canv.setFillColor(COLORS['timeline_node'])
-            self.canv.circle(x, axis_y, self.NODE_R, fill=1, stroke=0)
-            self.canv.setFont(self.font_name, self.fs.label)
-            self.canv.setFillColor(COLORS['text'])
-            self.canv.drawCentredString(x, axis_y + self.NODE_R + 5, label)
-            self.canv.setFillColor(COLORS['text_secondary'])
-            self.canv.drawCentredString(x, axis_y - self.NODE_R - self.fs.label - 3, dt.strftime('%H:%M'))
-            self.canv.restoreState()
-
-
-# ── 卡片3：纯文字卡片 ─────────────────────────────────────────────────────
-class TextCardFlowable(CardFlowable):
-    """单段文字卡片（交通建议等）。"""
-    def __init__(self, title: str, body_text: str, font_name: str, fs: FontSizes):
-        super().__init__(font_name, fs)
-        self.title     = title
-        self.body_text = body_text
-        lines = max(1, len(body_text) // 30 + 1)
-        self._body_h = lines * (fs.body + 7)
-
-    def _content_height(self) -> float:
-        return self.fs.title + 8 + self._body_h
-
-    def _draw_content(self, card_w: float, card_h: float):
-        title_y = self._draw_title(self.title, card_h)
-        x = CARD_PADDING_H + CARD_LEFT_BORDER + 4
-        max_w = card_w - x - CARD_PADDING_H
-        cpl   = max(10, int(max_w / (self.fs.body * 0.62)))
-        lines = []
-        text  = self.body_text
-        while text:
-            lines.append(text[:cpl])
-            text = text[cpl:]
-        self.canv.saveState()
-        self.canv.setFont(self.font_name, self.fs.body)
-        self.canv.setFillColor(COLORS['text'])
+        title_y    = self._draw_title("🚗  路线规划", card_h)
+        x_label    = self._x0()
+        x_value    = x_label + 68
+        divider_x2 = card_w - CARD_PADDING_H
         y = title_y - 6
-        for line in lines:
-            y -= (self.fs.body + 7)
-            self.canv.drawString(x, y, line)
-        self.canv.restoreState()
+        for i, (label, value) in enumerate(self._rows):
+            row_bot = y - self._row_h
+            self.canv.saveState()
+            self.canv.setFont(self.font_name, self.fs.label)
+            self.canv.setFillColor(COLORS['text_secondary'])
+            self.canv.drawString(x_label, row_bot + 4, label)
+            # 导航链接用绿色区分
+            self.canv.setFont(self.font_name, self.fs.body)
+            if label == '导航链接':
+                self.canv.setFillColor(COLORS['green'])
+            else:
+                self.canv.setFillColor(COLORS['text'])
+            # 长文本截断
+            max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
+            display = value[:max_chars] + ('…' if len(value) > max_chars else '')
+            self.canv.drawString(x_value, row_bot + 4, display)
+            if i < len(self._rows) - 1:
+                self.canv.setStrokeColor(COLORS['divider'])
+                self.canv.setLineWidth(0.5)
+                self.canv.line(x_label, row_bot, divider_x2, row_bot)
+            self.canv.restoreState()
+            y = row_bot
 
 
-# ── 卡片4：医院对比表 ─────────────────────────────────────────────────────
+# ── 卡片3：挂号链接 ───────────────────────────────────────────────────────
+class RegistrationCardFlowable(CardFlowable):
+    """挂号官网、平台、注意事项。"""
+
+    def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
+        super().__init__(font_name, fs)
+        self.task_params = task_params
+        self._rows = [
+            ('挂号平台', task_params.get('registration_platform', '—')),
+            ('官网/链接', task_params.get('registration_url', '—')),
+            ('注意事项', task_params.get('booking_note', '—')),
+            ('医院地址', task_params.get('hospital_address', '—')),
+        ]
+        self._row_h = fs.body + 10
+
+    def _content_height(self) -> float:
+        return self.fs.title + 8 + len(self._rows) * self._row_h
+
+    def _draw_content(self, card_w: float, card_h: float):
+        title_y    = self._draw_title("🔗  挂号信息", card_h)
+        x_label    = self._x0()
+        x_value    = x_label + 68
+        divider_x2 = card_w - CARD_PADDING_H
+        y = title_y - 6
+        for i, (label, value) in enumerate(self._rows):
+            row_bot = y - self._row_h
+            self.canv.saveState()
+            self.canv.setFont(self.font_name, self.fs.label)
+            self.canv.setFillColor(COLORS['text_secondary'])
+            self.canv.drawString(x_label, row_bot + 4, label)
+            self.canv.setFont(self.font_name, self.fs.body)
+            # 链接用蓝色
+            if label == '官网/链接':
+                self.canv.setFillColor(COLORS['primary'])
+            else:
+                self.canv.setFillColor(COLORS['text'])
+            max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
+            display = value[:max_chars] + ('…' if len(value) > max_chars else '')
+            self.canv.drawString(x_value, row_bot + 4, display)
+            if i < len(self._rows) - 1:
+                self.canv.setStrokeColor(COLORS['divider'])
+                self.canv.setLineWidth(0.5)
+                self.canv.line(x_label, row_bot, divider_x2, row_bot)
+            self.canv.restoreState()
+            y = row_bot
+
+
+# ── 卡片4：就医方案（院内导引） ───────────────────────────────────────────
+class NavStepsCardFlowable(CardFlowable):
+    """院内导引步骤卡片，每步一行。"""
+
+    def __init__(self, nav_steps: list, font_name: str, fs: FontSizes):
+        super().__init__(font_name, fs)
+        self.nav_steps = nav_steps or ['请按医院指示牌前往对应科室。']
+        self._row_h = fs.body + 9
+
+    def _content_height(self) -> float:
+        return self.fs.title + 8 + len(self.nav_steps) * self._row_h
+
+    def _draw_content(self, card_w: float, card_h: float):
+        title_y = self._draw_title("📋  就医方案", card_h)
+        x0      = self._x0()
+        max_chars = int((card_w - x0 - CARD_PADDING_H) / (self.fs.body * 0.62)) or 28
+        y = title_y - 6
+        for step in self.nav_steps:
+            row_bot = y - self._row_h
+            self.canv.saveState()
+            self.canv.setFont(self.font_name, self.fs.body)
+            self.canv.setFillColor(COLORS['text'])
+            display = step[:max_chars] + ('…' if len(step) > max_chars else '')
+            self.canv.drawString(x0, row_bot + 4, display)
+            self.canv.restoreState()
+            y = row_bot
+
+
+# ── 卡片5：出行清单（定制化） ─────────────────────────────────────────────
+class ChecklistCardFlowable(CardFlowable):
+    """出行物品清单，支持从 task_params 传入定制化列表。"""
+
+    DEFAULT_CHECKLIST = [
+        '□  身份证（千万别忘了）',
+        '□  医保卡 / 社保卡',
+        '□  手机 & 充电宝',
+        '□  钱包 / 支付宝',
+    ]
+
+    def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
+        super().__init__(font_name, fs)
+        raw = task_params.get('checklist', [])
+        if raw and isinstance(raw, list):
+            # checklist 是 [{'item': ..., 'note': ...}] 格式
+            if isinstance(raw[0], dict):
+                self.items = []
+                for d in raw:
+                    note = f"  —— {d['note']}" if d.get('note') else ''
+                    self.items.append(f"□  {d['item']}{note}")
+            else:
+                self.items = [f"□  {s}" for s in raw]
+        else:
+            self.items = self.DEFAULT_CHECKLIST
+        self._row_h = fs.body + 9
+
+    def _content_height(self) -> float:
+        return self.fs.title + 8 + len(self.items) * self._row_h
+
+    def _draw_content(self, card_w: float, card_h: float):
+        title_y   = self._draw_title("🎒  出行清单", card_h)
+        x0        = self._x0()
+        max_chars = int((card_w - x0 - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
+        y = title_y - 6
+        for item in self.items:
+            row_bot = y - self._row_h
+            self.canv.saveState()
+            self.canv.setFont(self.font_name, self.fs.body)
+            self.canv.setFillColor(COLORS['text'])
+            display = item[:max_chars] + ('…' if len(item) > max_chars else '')
+            self.canv.drawString(x0, row_bot + 4, display)
+            self.canv.restoreState()
+            y = row_bot
+
+
+# ── 卡片6：医院对比表 ─────────────────────────────────────────────────────
 class TableCardFlowable(CardFlowable):
-    """医院对比表卡片。"""
     HEADERS          = ['排名', '医院', '医生', '职称', '时间', '费用', '排队', '距离', '评分']
     COL_WIDTHS_RATIO = [0.07, 0.18, 0.11, 0.10, 0.16, 0.09, 0.09, 0.09, 0.11]
 
@@ -343,10 +424,10 @@ class TableCardFlowable(CardFlowable):
         return self.fs.title + 8 + self._num_rows * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        self._draw_title("📋  医院对比", card_h)
-        title_h = self.fs.title + 8
-        x       = CARD_PADDING_H + CARD_LEFT_BORDER + 4
-        table_w = card_w - x - CARD_PADDING_H
+        self._draw_title("📊  医院对比", card_h)
+        title_h   = self.fs.title + 8
+        x         = self._x0()
+        table_w   = card_w - x - CARD_PADDING_H
         col_widths = [r * table_w for r in self.COL_WIDTHS_RATIO]
         data = [self.HEADERS]
         for r in self.recommendations:
@@ -384,81 +465,14 @@ class TableCardFlowable(CardFlowable):
         t.drawOn(self.canv, x, y_bottom)
 
 
-# ── 卡片5：出行清单 + 需求摘要（左右并排） ────────────────────────────────
-class TwoColumnCardFlowable(CardFlowable):
-    """左列：出行清单；右列：需求摘要。"""
-    CHECKLIST = [
-        '□  身份证（千万别忘了）',
-        '□  医保卡 / 社保卡',
-        '□  手机 & 充电宝',
-        '□  钱包 / 支付宝',
-    ]
-    SUMMARY_KEYS = [
-        ('科室', 'department'),
-        ('症状', 'symptom'),
-        ('时段', 'time_window'),
-        ('偏好', 'travel_preference'),
-    ]
-
-    def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
-        super().__init__(font_name, fs)
-        self.task_params = task_params
-        self._rows  = max(len(self.CHECKLIST), len(self.SUMMARY_KEYS))
-        self._row_h = fs.body + 9
-
-    def _content_height(self) -> float:
-        return self.fs.title + 10 + self._rows * self._row_h
-
-    def _draw_content(self, card_w: float, card_h: float):
-        x0      = CARD_PADDING_H + CARD_LEFT_BORDER + 4
-        inner_w = card_w - x0 - CARD_PADDING_H
-        mid_x   = x0 + inner_w / 2
-        # 两列标题
-        title_y = card_h - CARD_PADDING_V - self.fs.title
-        self.canv.saveState()
-        self.canv.setFont(self.font_name, self.fs.title)
-        self.canv.setFillColor(COLORS['primary'])
-        self.canv.drawString(x0, title_y, "🎒  出行清单")
-        self.canv.drawString(mid_x + 8, title_y, "📊  需求摘要")
-        self.canv.restoreState()
-        # 竖线分隔
-        body_top = title_y - 8
-        body_bot = body_top - self._rows * self._row_h
-        self.canv.saveState()
-        self.canv.setStrokeColor(COLORS['divider'])
-        self.canv.setLineWidth(1)
-        self.canv.line(mid_x, body_top, mid_x, body_bot)
-        self.canv.restoreState()
-        # 左列
-        y = body_top
-        self.canv.saveState()
-        self.canv.setFont(self.font_name, self.fs.body)
-        self.canv.setFillColor(COLORS['text'])
-        for item in self.CHECKLIST:
-            y -= self._row_h
-            self.canv.drawString(x0, y + 2, item)
-        self.canv.restoreState()
-        # 右列
-        y = body_top
-        self.canv.saveState()
-        for label, key in self.SUMMARY_KEYS:
-            y -= self._row_h
-            value = str(self.task_params.get(key, '未指定') or '未指定')
-            self.canv.setFont(self.font_name, self.fs.label)
-            self.canv.setFillColor(COLORS['text_secondary'])
-            self.canv.drawString(mid_x + 8, y + 2, f"{label}：")
-            self.canv.setFont(self.font_name, self.fs.body)
-            self.canv.setFillColor(COLORS['text'])
-            self.canv.drawString(mid_x + 45, y + 2, value)
-        self.canv.restoreState()
-
-
 # ── 主入口 ────────────────────────────────────────────────────────────────
 def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
                           output_path: str, large_font: bool = False):
     """
     生成现代卡片风就医行程单 PDF。
     接口与旧版保持完全一致，output_generator.py 无需修改。
+
+    卡片顺序：就诊信息 → 路线规划 → 挂号信息 → 就医方案 → 出行清单 → 医院对比
     """
     if not REPORTLAB_AVAILABLE:
         _generate_text_fallback(recommendations, task_params, output_path)
@@ -479,44 +493,74 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
 
     if recommendations:
         rec = recommendations[0]
+
+        # 卡片1：就诊信息
         elements.append(InfoCardFlowable(rec, task_params, font_name, fs))
         elements.append(Spacer(1, CARD_SPACING))
-        elements.append(TimelineFlowable(rec, font_name, fs))
+
+        # 卡片2：路线规划（真实路线数据）
+        elements.append(RouteCardFlowable(task_params, font_name, fs))
         elements.append(Spacer(1, CARD_SPACING))
-        travel_text = (
-            f"推荐打车前往，预计行程约 {rec.get('total_travel_time_min', '—')} 分钟。"
-            f"综合评分 {rec.get('score', '—')}/10 分——{rec.get('reason', '')}。"
-            f"建议提前 15 分钟到院完成分诊。"
-        )
-        elements.append(TextCardFlowable("🚗  交通建议", travel_text, font_name, fs))
+
+        # 卡片3：挂号链接
+        elements.append(RegistrationCardFlowable(task_params, font_name, fs))
         elements.append(Spacer(1, CARD_SPACING))
+
+        # 卡片4：就医方案（院内导引）
+        nav_steps = task_params.get('nav_steps', [])
+        elements.append(NavStepsCardFlowable(nav_steps, font_name, fs))
+        elements.append(Spacer(1, CARD_SPACING))
+
+        # 卡片5：出行清单（定制化）
+        elements.append(ChecklistCardFlowable(task_params, font_name, fs))
+        elements.append(Spacer(1, CARD_SPACING))
+
+        # 卡片6：医院对比表
         elements.append(TableCardFlowable(recommendations, font_name, fs))
-        elements.append(Spacer(1, CARD_SPACING))
-        elements.append(TwoColumnCardFlowable(task_params, font_name, fs))
+
     else:
-        elements.append(TextCardFlowable(
-            "⚠️  暂无匹配号源",
-            "未找到符合条件的号源，请稍后重试，或尝试放宽科室和时间条件。",
-            font_name, fs
-        ))
+        elements.append(_empty_card(font_name, fs))
 
     doc.build(elements, onFirstPage=on_page, onLaterPages=on_later)
+
+
+def _empty_card(font_name, fs):
+    from reportlab.platypus import Flowable
+
+    class _Msg(Flowable):
+        def wrap(self, w, h):
+            self._w = w
+            return w, 60
+        def draw(self):
+            draw_rounded_rect(self.canv, 0, 0, self._w, 60, fill_color=COLORS['card_bg'])
+            self.canv.setFont(font_name, fs.body)
+            self.canv.setFillColor(COLORS['text_secondary'])
+            self.canv.drawCentredString(self._w / 2, 22,
+                "未找到符合条件的号源，请稍后重试，或尝试放宽科室和时间条件。")
+    return _Msg()
 
 
 # ── 文本降级 ──────────────────────────────────────────────────────────────
 def _generate_text_fallback(recommendations: List[Dict],
                              task_params: Dict, output_path: str):
-    """reportlab 不可用时生成纯文本文件。"""
     lines = ["就医行程单", "=" * 60, ""]
     if recommendations:
         r = recommendations[0]
         lines += [
             f"医院：{r.get('hospital_name', '—')}",
             f"科室：{task_params.get('department', '—')}",
-            f"医生：{r.get('doctor_name', '—')} {r.get('doctor_title', '')}",
+            f"医生：{r.get('doctor_name', '')} {r.get('doctor_title', '')}",
             f"时间：{r.get('appointment_time', '—')}",
-            f"排队：约 {r.get('queue_estimate_min', '—')} 分钟",
-            "", "出行清单：身份证 / 医保卡 / 手机 / 钱包",
+            "",
+            f"出发时间：{task_params.get('depart_time', '—')}",
+            f"路线：{task_params.get('route_description', '—')}",
+            f"导航：{task_params.get('route_map_url', '—')}",
+            "",
+            f"挂号平台：{task_params.get('registration_platform', '—')}",
+            f"挂号链接：{task_params.get('registration_url', '—')}",
+            f"注意事项：{task_params.get('booking_note', '—')}",
+            "",
+            "出行清单：身份证 / 医保卡 / 手机 / 钱包",
         ]
     else:
         lines.append("未找到匹配号源，请稍后重试。")

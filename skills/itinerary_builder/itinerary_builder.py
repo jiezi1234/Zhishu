@@ -263,10 +263,26 @@ def _generate_pdf(hospital_name, hospital_address, department,
         "reason":               route.get("description", ""),
     }]
     task_params = {
-        "department":        department,
-        "symptom":           reg.get("symptom", ""),
-        "time_window":       appointment_time or "",
-        "travel_preference": route.get("mode", ""),
+        "department":           department,
+        "symptom":              reg.get("symptom", ""),
+        "time_window":          appointment_time or "",
+        "travel_preference":    route.get("mode", ""),
+        # 路线规划
+        "route_mode":           route.get("mode", ""),
+        "route_duration_min":   str(route.get("duration_min", "")),
+        "route_distance_km":    str(route.get("distance_km", "")),
+        "route_description":    route.get("description", ""),
+        "route_map_url":        route.get("map_url", ""),
+        "depart_time":          depart_time,
+        # 挂号信息
+        "registration_url":     reg.get("registration_url", ""),
+        "registration_platform": reg.get("registration_platform", ""),
+        "booking_note":         reg.get("booking_note", ""),
+        "hospital_address":     hospital_address or "",
+        # 院内导引
+        "nav_steps":            nav_steps,
+        # 出行清单（按年龄定制）
+        "checklist":            checklist,
     }
 
     generate_pdf_document(recommendations, task_params, filepath, large_font=large_font)
