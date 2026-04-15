@@ -234,206 +234,44 @@ def _generate_pdf(hospital_name, hospital_address, department,
                   depart_time, checklist, nav_steps,
                   age_group, output_format, timestamp) -> str:
     """
-    生成 PDF 行程单。
-    优先使用 reportlab（需安装），降级为纯文本文件。
+    生成 PDF 行程单，调用 skill_4_output/pdf_generator.py 新版卡片风生成器。
     """
+    import sys
+    skill4_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "skill_4_output")
+    if skill4_dir not in sys.path:
+        sys.path.insert(0, skill4_dir)
+
+    from pdf_generator import generate_pdf_document
+
     filename = f"itinerary_{timestamp}.pdf"
     filepath = os.path.join(OUTPUT_DIR, filename)
-
     large_font = (output_format == "large_font_pdf")
 
-    try:
-        _generate_pdf_reportlab(
-            filepath=filepath,
-            hospital_name=hospital_name,
-            hospital_address=hospital_address,
-            department=department,
-            registration_info=registration_info,
-            appointment_time=appointment_time,
-            route=route,
-            depart_time=depart_time,
-            checklist=checklist,
-            nav_steps=nav_steps,
-            age_group=age_group,
-            large_font=large_font,
-        )
-        logger.info(f"[itinerary_builder] PDF 生成成功: {filepath}")
-    except Exception as e:
-        logger.warning(f"[itinerary_builder] reportlab 生成失败: {e}，降级为文本")
-        filepath = filepath.replace(".pdf", ".txt")
-        _generate_text_fallback(
-            filepath, hospital_name, department,
-            registration_info, appointment_time, route,
-            depart_time, checklist, nav_steps, age_group
-        )
+    reg = registration_info or {}
+    recommendations = [{
+        "rank":                 1,
+        "hospital_name":        hospital_name,
+        "doctor_name":          reg.get("doctor_name", ""),
+        "doctor_title":         reg.get("doctor_title", ""),
+        "appointment_time":     appointment_time or "",
+        "total_cost":           reg.get("total_cost", 0),
+        "total_travel_time_min": route.get("duration_min", 30),
+        "distance_km":          route.get("distance_km", 0),
+        "queue_estimate_min":   reg.get("queue_estimate_min", 30),
+        "score":                reg.get("score", 0),
+        "reason":               route.get("description", ""),
+    }]
+    task_params = {
+        "department":        department,
+        "symptom":           reg.get("symptom", ""),
+        "time_window":       appointment_time or "",
+        "travel_preference": route.get("mode", ""),
+    }
 
+    generate_pdf_document(recommendations, task_params, filepath, large_font=large_font)
+    logger.info(f"[itinerary_builder] PDF 生成成功: {filepath}")
     return filepath
-
-
-def _generate_pdf_reportlab(filepath, hospital_name, hospital_address,
-                             department, registration_info, appointment_time,
-                             route, depart_time, checklist, nav_steps,
-                             age_group, large_font):
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-
-    # 中文字体注册
-    font_name = _register_chinese_font()
-
-    # 字号
-    if large_font:
-        T, H, N, S = 26, 18, 16, 13
-    else:
-        T, H, N, S = 18, 14, 12, 10
-
-    doc = SimpleDocTemplate(filepath, pagesize=A4,
-                            rightMargin=0.6*inch, leftMargin=0.6*inch,
-                            topMargin=0.8*inch, bottomMargin=0.8*inch)
-
-    def style(name, size, color="#333333", align=TA_LEFT, bold=False):
-        return ParagraphStyle(name, fontName=font_name, fontSize=size,
-                              textColor=colors.HexColor(color),
-                              spaceAfter=8, leading=size+5, alignment=align)
-
-    title_s   = style("Title",   T,  "#FF6B6B", TA_CENTER)
-    heading_s = style("Heading", H,  "#FF6B6B")
-    normal_s  = style("Normal",  N)
-    small_s   = style("Small",   S,  "#666666")
-
-    elems = []
-    icon = "👵" if age_group == "elderly" else ("🚀" if age_group == "adult" else "🚑")
-    elems.append(Paragraph(f"{icon} 就医行程单", title_s))
-    elems.append(Paragraph(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}", small_s))
-    elems.append(Spacer(1, 0.1*inch))
-
-    # 就诊核心信息
-    elems.append(Paragraph("🏥 就诊信息", heading_s))
-    reg = registration_info or {}
-    info_rows = [
-        ["医院",   hospital_name],
-        ["科室",   department],
-        ["地址",   hospital_address or "请以医院官网为准"],
-        ["预约时间", appointment_time or "请自行确认"],
-        ["挂号平台", reg.get("registration_platform", "—")],
-        ["挂号链接", reg.get("registration_url", "—")],
-        ["挂号注意", reg.get("booking_note", "—")],
-    ]
-    tbl = Table(info_rows, colWidths=[1.4*inch, 4.2*inch])
-    tbl.setStyle(TableStyle([
-        ("FONT",        (0,0), (-1,-1), font_name, N),
-        ("TEXTCOLOR",   (0,0), (0,-1),  colors.HexColor("#FF6B6B")),
-        ("VALIGN",      (0,0), (-1,-1), "TOP"),
-        ("LINEBELOW",   (0,0), (-1,-1), 0.4, colors.HexColor("#EEEEEE")),
-        ("LEFTPADDING", (0,0), (-1,-1), 6),
-        ("TOPPADDING",  (0,0), (-1,-1), 6),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 6),
-    ]))
-    elems.append(tbl)
-    elems.append(Spacer(1, 0.15*inch))
-
-    # 出行信息
-    elems.append(Paragraph("🚗 出行方案", heading_s))
-    elems.append(Paragraph(
-        f"建议出发时间：{depart_time}  |  预计用时：{route['duration_min']} 分钟  |  "
-        f"距离：{route['distance_km']} km  |  方式：{route['mode']}",
-        normal_s
-    ))
-    elems.append(Paragraph(f"路线导航：{route['map_url']}", small_s))
-    if route.get("description"):
-        elems.append(Paragraph(route["description"], normal_s))
-    elems.append(Spacer(1, 0.15*inch))
-
-    # 携带清单
-    elems.append(Paragraph("🎒 出门前请确认", heading_s))
-    elems.append(Paragraph("(可以照着打个勾 ✅)", small_s))
-    for item_dict in checklist:
-        note = f"  — {item_dict['note']}" if item_dict["note"] else ""
-        elems.append(Paragraph(f"[ ] {item_dict['item']}{note}", normal_s))
-    elems.append(Spacer(1, 0.15*inch))
-
-    # 院内导引
-    elems.append(Paragraph("🚶 到了医院怎么走", heading_s))
-    for step in nav_steps:
-        elems.append(Paragraph(step, normal_s))
-    elems.append(Spacer(1, 0.15*inch))
-
-    # 免责
-    elems.append(Paragraph(
-        "❤️ 祝您就医顺利！本行程单仅供参考，具体挂号与就诊以医院官方为准。",
-        small_s
-    ))
-
-    doc.build(elems)
-
-
-def _register_chinese_font() -> str:
-    """注册中文字体，返回字体名称"""
-    try:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        paths = [
-            r"C:\Windows\Fonts\simhei.ttf",
-            r"C:\Windows\Fonts\msyh.ttc",
-            r"C:\Windows\Fonts\simsun.ttc",
-        ]
-        for path in paths:
-            if os.path.exists(path):
-                name = os.path.splitext(os.path.basename(path))[0].upper()
-                try:
-                    pdfmetrics.registerFont(TTFont(name, path))
-                    return name
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return "Helvetica"
-
-
-def _generate_text_fallback(filepath, hospital_name, department,
-                             registration_info, appointment_time, route,
-                             depart_time, checklist, nav_steps, age_group):
-    """reportlab 不可用时输出纯文本行程单"""
-    reg = registration_info or {}
-    lines = [
-        "=" * 60,
-        f"  就医行程单  ({datetime.now().strftime('%Y-%m-%d %H:%M')})",
-        "=" * 60,
-        "",
-        "【就诊信息】",
-        f"  医院：{hospital_name}",
-        f"  科室：{department}",
-        f"  预约时间：{appointment_time or '请自行确认'}",
-        f"  挂号平台：{reg.get('registration_platform', '—')}",
-        f"  挂号链接：{reg.get('registration_url', '—')}",
-        f"  注意事项：{reg.get('booking_note', '—')}",
-        "",
-        "【出行方案】",
-        f"  建议出发：{depart_time}",
-        f"  预计时间：{route['duration_min']} 分钟",
-        f"  导航链接：{route['map_url']}",
-        "",
-        "【出门前请确认】",
-    ]
-    for item_dict in checklist:
-        note = f"（{item_dict['note']}）" if item_dict["note"] else ""
-        lines.append(f"  [ ] {item_dict['item']}{note}")
-    lines += ["", "【院内导引】"]
-    for step in nav_steps:
-        lines.append(f"  {step}")
-    lines += [
-        "",
-        "=" * 60,
-        "祝您就医顺利！本行程单仅供参考，具体挂号与就诊以医院官方为准。",
-        "=" * 60,
-    ]
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
 
 
 # ── 历史记录 ──────────────────────────────────────────────────────────────
