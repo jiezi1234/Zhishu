@@ -178,7 +178,8 @@ class CardFlowable(Flowable):
         self.canv.setFont(self.font_name, self.fs.title)
         self.canv.setFillColor(COLORS['primary'])
         y = card_h - CARD_PADDING_V - self.fs.title
-        self.canv.drawString(CARD_PADDING_H + CARD_LEFT_BORDER + 4, y, title)
+        x = CARD_PADDING_H + CARD_LEFT_BORDER + 4
+        self.canv.drawString(x, y, title)
         self.canv.restoreState()
         return y
 
@@ -188,7 +189,7 @@ class CardFlowable(Flowable):
 
 # ── 卡片1：就诊信息 ───────────────────────────────────────────────────────
 class InfoCardFlowable(CardFlowable):
-    ROWS = [
+    ALL_ROWS = [
         ('医  院', 'hospital_name'),
         ('科  室', '_department'),
         ('医  生', '_doctor'),
@@ -201,27 +202,36 @@ class InfoCardFlowable(CardFlowable):
         self.rec = rec
         self.task_params = task_params
         self._row_h = fs.body + 10
+        self._rows = []
+        for label, key in self.ALL_ROWS:
+            val = self._get_value_for_filter(key).strip()
+            if val and val not in ("—", "None", "未指定"):
+                self._rows.append((label, val))
 
-    def _get_value(self, key: str) -> str:
+    def _get_value_for_filter(self, key: str) -> str:
         if key == '_department':
             return self.task_params.get('department', '未指定')
         if key == '_doctor':
             return f"{self.rec.get('doctor_name', '')}  {self.rec.get('doctor_title', '')}".strip()
         if key == '_queue':
-            q = self.rec.get('queue_estimate_min', '—')
-            return f"约 {q} 分钟" if q != '—' else '—'
+            q = str(self.rec.get('queue_estimate_min', '—')).strip()
+            return f"约 {q} 分钟" if q and q not in ('—', 'None') else '—'
         return str(self.rec.get(key, '—'))
 
     def _content_height(self) -> float:
-        return self.fs.title + 8 + len(self.ROWS) * self._row_h
+        if not self._rows:
+            return 0
+        return self.fs.title + 8 + len(self._rows) * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
+        if not self._rows:
+            return
         title_y  = self._draw_title("🏥  就诊信息", card_h)
         x_label  = self._x0()
         x_value  = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
         y = title_y - 6
-        for i, (label, key) in enumerate(self.ROWS):
+        for i, (label, val) in enumerate(self._rows):
             row_bot = y - self._row_h
             self.canv.saveState()
             self.canv.setFont(self.font_name, self.fs.label)
@@ -229,8 +239,8 @@ class InfoCardFlowable(CardFlowable):
             self.canv.drawString(x_label, row_bot + 4, label)
             self.canv.setFont(self.font_name, self.fs.body)
             self.canv.setFillColor(COLORS['text'])
-            self.canv.drawString(x_value, row_bot + 4, self._get_value(key))
-            if i < len(self.ROWS) - 1:
+            self.canv.drawString(x_value, row_bot + 4, val)
+            if i < len(self._rows) - 1:
                 self.canv.setStrokeColor(COLORS['divider'])
                 self.canv.setLineWidth(0.5)
                 self.canv.line(x_label, row_bot, divider_x2, row_bot)
@@ -240,50 +250,101 @@ class InfoCardFlowable(CardFlowable):
 
 # ── 卡片2：路线规划 ───────────────────────────────────────────────────────
 class RouteCardFlowable(CardFlowable):
-    """真实路线规划卡片：出发时间、交通方式、距离、耗时、地图链接。"""
+    """真实路线规划卡片：支持多行路线说明（移除地图链接）。"""
 
     def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
         self.task_params = task_params
-        self._rows = [
-            ('出发时间', task_params.get('depart_time', '—')),
-            ('交通方式', task_params.get('route_mode', '—')),
-            ('预计距离', f"{task_params.get('route_distance_km', '—')} km"),
-            ('预计用时', f"{task_params.get('route_duration_min', '—')} 分钟"),
-            ('路线说明', task_params.get('route_description', '请使用手机导航前往')),
-            ('导航链接', task_params.get('route_map_url', '—')),
+        
+        dist = str(task_params.get('route_distance_km', '—')).strip()
+        dur = str(task_params.get('route_duration_min', '—')).strip()
+        
+        all_rows = [
+            ('出发时间', str(task_params.get('depart_time', '—')).strip()),
+            ('交通方式', str(task_params.get('route_mode', '—')).strip()),
+            ('预计距离', f"{dist} km" if dist not in ('', '—', 'None') else '—'),
+            ('预计用时', f"{dur} 分钟" if dur not in ('', '—', 'None') else '—'),
+            ('路线说明', str(task_params.get('route_description', '—')).strip()),
         ]
-        self._row_h = fs.body + 10
+        
+        self._rows = [(lbl, val) for lbl, val in all_rows if val and val not in ('—', '— km', '— 分钟')]
+        self._line_height = fs.body + 6
+        self._pad_y = 4
+        
+        # 预计算布局
+        self._layout = []
+        self._total_height = 0
+        
+    def wrap(self, available_width, available_height):
+        # 提前计算布局，因为需要知道可获得的宽度
+        self._avail_width = available_width
+        self._calc_layout(available_width)
+        h = self._content_height() + CARD_PADDING_V * 2
+        return available_width, h
+
+    def _calc_layout(self, w: float):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        self._layout = []
+        self._total_height = self.fs.title + 8
+        x_value = self._x0() + 68
+        max_w = w - x_value - CARD_PADDING_H
+        
+        for i, (label, val) in enumerate(self._rows):
+            lines = []
+            curr = ""
+            for char in val:
+                t = curr + char
+                if stringWidth(t, self.font_name, self.fs.body) <= max_w:
+                    curr = t
+                else:
+                    if curr: lines.append(curr)
+                    curr = char
+            if curr:
+                lines.append(curr)
+            if not lines:
+                lines = [""]
+            
+            row_h = self._pad_y * 2 + len(lines) * self._line_height
+            self._layout.append((label, lines, row_h))
+            self._total_height += row_h
 
     def _content_height(self) -> float:
-        return self.fs.title + 8 + len(self._rows) * self._row_h
+        if not self._rows:
+            return 0
+        return self._total_height
 
     def _draw_content(self, card_w: float, card_h: float):
+        if not self._rows:
+            return
         title_y    = self._draw_title("🚗  路线规划", card_h)
         x_label    = self._x0()
         x_value    = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
         y = title_y - 6
-        for i, (label, value) in enumerate(self._rows):
-            row_bot = y - self._row_h
+        
+        for i, (label, lines, row_h) in enumerate(self._layout):
+            row_bot = y - row_h
             self.canv.saveState()
+            
+            # Label
             self.canv.setFont(self.font_name, self.fs.label)
             self.canv.setFillColor(COLORS['text_secondary'])
-            self.canv.drawString(x_label, row_bot + 4, label)
-            # 导航链接用绿色区分
+            # 对齐上方
+            self.canv.drawString(x_label, y - self._pad_y - self.fs.label, label)
+            
+            # Value
             self.canv.setFont(self.font_name, self.fs.body)
-            if label == '导航链接':
-                self.canv.setFillColor(COLORS['green'])
-            else:
-                self.canv.setFillColor(COLORS['text'])
-            # 长文本截断
-            max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
-            display = value[:max_chars] + ('…' if len(value) > max_chars else '')
-            self.canv.drawString(x_value, row_bot + 4, display)
-            if i < len(self._rows) - 1:
+            self.canv.setFillColor(COLORS['text'])
+            for j, line in enumerate(lines):
+                ly = y - self._pad_y - self.fs.body - (j * self._line_height)
+                self.canv.drawString(x_value, ly, line)
+                
+            # Divider
+            if i < len(self._layout) - 1:
                 self.canv.setStrokeColor(COLORS['divider'])
                 self.canv.setLineWidth(0.5)
                 self.canv.line(x_label, row_bot, divider_x2, row_bot)
+                
             self.canv.restoreState()
             y = row_bot
 
@@ -295,18 +356,24 @@ class RegistrationCardFlowable(CardFlowable):
     def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
         self.task_params = task_params
-        self._rows = [
-            ('挂号平台', task_params.get('registration_platform', '—')),
-            ('官网/链接', task_params.get('registration_url', '—')),
-            ('注意事项', task_params.get('booking_note', '—')),
-            ('医院地址', task_params.get('hospital_address', '—')),
+        # 只保留非空字段
+        all_rows = [
+            ('挂号平台', task_params.get('registration_platform', '')),
+            ('官网/链接', task_params.get('registration_url', '')),
+            ('注意事项', task_params.get('booking_note', '')),
+            ('医院地址', task_params.get('hospital_address', '')),
         ]
+        self._rows = [(label, value) for label, value in all_rows if value and value != '—']
         self._row_h = fs.body + 10
 
     def _content_height(self) -> float:
+        if not self._rows:
+            return 0
         return self.fs.title + 8 + len(self._rows) * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
+        if not self._rows:
+            return
         title_y    = self._draw_title("🔗  挂号信息", card_h)
         x_label    = self._x0()
         x_value    = x_label + 68
@@ -319,13 +386,14 @@ class RegistrationCardFlowable(CardFlowable):
             self.canv.setFillColor(COLORS['text_secondary'])
             self.canv.drawString(x_label, row_bot + 4, label)
             self.canv.setFont(self.font_name, self.fs.body)
-            # 链接用蓝色
+            # 链接用蓝色，不截断
             if label == '官网/链接':
                 self.canv.setFillColor(COLORS['primary'])
+                display = value
             else:
                 self.canv.setFillColor(COLORS['text'])
-            max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
-            display = value[:max_chars] + ('…' if len(value) > max_chars else '')
+                max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
+                display = value[:max_chars] + ('…' if len(value) > max_chars else '')
             self.canv.drawString(x_value, row_bot + 4, display)
             if i < len(self._rows) - 1:
                 self.canv.setStrokeColor(COLORS['divider'])
@@ -337,30 +405,60 @@ class RegistrationCardFlowable(CardFlowable):
 
 # ── 卡片4：就医方案（院内导引） ───────────────────────────────────────────
 class NavStepsCardFlowable(CardFlowable):
-    """院内导引步骤卡片，每步一行。"""
+    """院内导引步骤卡片，每步一行，支持自动换行。"""
 
     def __init__(self, nav_steps: list, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
         self.nav_steps = nav_steps or ['请按医院指示牌前往对应科室。']
         self._row_h = fs.body + 9
 
+    def _wrap_text(self, text: str, max_width: float) -> list:
+        """将长文本按宽度拆分成多行"""
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        lines = []
+        words = text
+        current_line = ""
+
+        for char in words:
+            test_line = current_line + char
+            width = stringWidth(test_line, self.font_name, self.fs.body)
+            if width <= max_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = char
+
+        if current_line:
+            lines.append(current_line)
+
+        return lines if lines else [text]
+
     def _content_height(self) -> float:
-        return self.fs.title + 8 + len(self.nav_steps) * self._row_h
+        # 计算所有步骤展开后的总高度
+        total_lines = 0
+        max_width = 400  # 估算可用宽度
+        for step in self.nav_steps:
+            lines = self._wrap_text(step, max_width)
+            total_lines += len(lines)
+        return self.fs.title + 8 + total_lines * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
         title_y = self._draw_title("📋  就医方案", card_h)
         x0      = self._x0()
-        max_chars = int((card_w - x0 - CARD_PADDING_H) / (self.fs.body * 0.62)) or 28
+        max_width = card_w - x0 - CARD_PADDING_H
         y = title_y - 6
+
         for step in self.nav_steps:
-            row_bot = y - self._row_h
-            self.canv.saveState()
-            self.canv.setFont(self.font_name, self.fs.body)
-            self.canv.setFillColor(COLORS['text'])
-            display = step[:max_chars] + ('…' if len(step) > max_chars else '')
-            self.canv.drawString(x0, row_bot + 4, display)
-            self.canv.restoreState()
-            y = row_bot
+            lines = self._wrap_text(step, max_width)
+            for line in lines:
+                row_bot = y - self._row_h
+                self.canv.saveState()
+                self.canv.setFont(self.font_name, self.fs.body)
+                self.canv.setFillColor(COLORS['text'])
+                self.canv.drawString(x0, row_bot + 4, line)
+                self.canv.restoreState()
+                y = row_bot
 
 
 # ── 卡片5：出行清单（定制化） ─────────────────────────────────────────────
@@ -502,9 +600,11 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
         elements.append(RouteCardFlowable(task_params, font_name, fs))
         elements.append(Spacer(1, CARD_SPACING))
 
-        # 卡片3：挂号链接
-        elements.append(RegistrationCardFlowable(task_params, font_name, fs))
-        elements.append(Spacer(1, CARD_SPACING))
+        # 卡片3：挂号链接（仅在有数据时显示）
+        reg_card = RegistrationCardFlowable(task_params, font_name, fs)
+        if reg_card._rows:  # 只有非空字段时才添加
+            elements.append(reg_card)
+            elements.append(Spacer(1, CARD_SPACING))
 
         # 卡片4：就医方案（院内导引）
         nav_steps = task_params.get('nav_steps', [])
@@ -513,10 +613,6 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
 
         # 卡片5：出行清单（定制化）
         elements.append(ChecklistCardFlowable(task_params, font_name, fs))
-        elements.append(Spacer(1, CARD_SPACING))
-
-        # 卡片6：医院对比表
-        elements.append(TableCardFlowable(recommendations, font_name, fs))
 
     else:
         elements.append(_empty_card(font_name, fs))

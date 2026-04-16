@@ -1,33 +1,28 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# 从项目根目录的 .env 文件加载环境变量
+# 复制 .env.example 为 .env 并按需填写
 load_dotenv()
 
+
 class Config:
-    """Configuration management for HealthPath Agent"""
+    """HealthPath Agent 运行配置"""
 
-    # DeepSeek API Configuration
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-cef4d7205b2e4ba29f8052f52e192c80")
-    DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
-    DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    # AutoClaw 工作区路径
+    AUTOCLAW_WORKSPACE = os.getenv(
+        "AUTOCLAW_WORKSPACE",
+        r"C:\Users\Administrator\.openclaw-autoclaw"
+    )
 
-    # AutoClaw Configuration
-    AUTOCLAW_WORKSPACE = os.getenv("AUTOCLAW_WORKSPACE", "C:\\Users\\Administrator\\.openclaw-autoclaw")
+    # 百度地图 Agent Plan Token（有则启用全国医院搜索 + 精确路线；无则降级到本地北京数据）
+    # 申请地址：https://lbs.baidu.com/apiconsole/agentplan
+    BAIDU_MAP_AUTH_TOKEN = os.getenv("BAIDU_MAP_AUTH_TOKEN", "")
 
-    # Data paths
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 项目路径
+    BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    OUTPUT_DIR    = os.getenv("OUTPUT_DIR", os.path.join(BASE_DIR, "output"))
     MOCK_DATA_DIR = os.path.join(BASE_DIR, "data", "mock")
-    OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
-    # Ensure output directory exists
+    # 确保输出目录存在
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    @staticmethod
-    def get_deepseek_config():
-        """Get DeepSeek API configuration"""
-        return {
-            "api_key": Config.DEEPSEEK_API_KEY,
-            "base_url": Config.DEEPSEEK_API_BASE,
-            "model": Config.DEEPSEEK_MODEL
-        }

@@ -153,6 +153,7 @@ class HealthPathAgent:
             reg_result = fetch(
                 hospital_name=selected_hospital,
                 department=departments[0],
+                user_location=user_location,
                 yixue_url=hospital_info.get("yixue_url"),
             )
             result["steps"]["registration"] = reg_result
@@ -202,17 +203,63 @@ class HealthPathAgent:
         }
 
 
-# ── 偏好提取辅助 ──────────────────────────────────────────────────────────
+# ── 偏好提取辅助（纯规则，无 LLM）────────────────────────────────────────
 
 def _extract_preferences(text: str, profile: Optional[dict]) -> dict:
-    """从用户输入提取出行/医院偏好"""
-    prefs = {"hospital_level": "三甲", "max_distance_km": 15}
-    if "最近" in text or "近的" in text:
-        prefs["max_distance_km"] = 8
-    if "周末" in text:
+    """
+    从用户自然语言输入中用关键词规则提取出行/医院偏好。
+    不依赖任何 LLM/外部 API，纯本地规则匹配。
+    """
+    prefs: dict = {
+        "hospital_level":  "三甲",
+        "max_distance_km": 15,
+        "travel_mode":     "transit",
+    }
+
+    # ── 距离偏好 ─────────────────────────────────────────────────────
+    if any(kw in text for kw in ["最近", "近的", "附近", "就近", "离我近", "走路"]):
+        prefs["max_distance_km"] = 6
+        prefs["travel_mode"]     = "walking"
+    elif any(kw in text for kw in ["10公里", "10km", "不太远"]):
+        prefs["max_distance_km"] = 10
+
+    # ── 时间窗口偏好 ─────────────────────────────────────────────────
+    if any(kw in text for kw in ["今天", "今日", "现在", "立刻", "马上", "急"]):
+        prefs["time_window"] = "today"
+    elif any(kw in text for kw in ["明天", "明日"]):
+        prefs["time_window"] = "tomorrow"
+    elif any(kw in text for kw in ["周末", "周六", "周日", "星期六", "星期天"]):
         prefs["time_window"] = "weekend"
-    if profile and profile.get("age_group") == "elderly":
-        prefs["max_distance_km"] = 10  # 老年人不宜走太远
+    elif any(kw in text for kw in ["本周", "这周", "这礼拜", "这星期"]):
+        prefs["time_window"] = "this_week"
+    elif any(kw in text for kw in ["下周", "下礼拜", "下星期", "下个星期"]):
+        prefs["time_window"] = "next_week"
+    elif any(kw in text for kw in ["夜间", "夜诊", "晚上", "夜门诊"]):
+        prefs["time_window"] = "evening"
+
+    # ── 医院级别偏好 ─────────────────────────────────────────────────
+    if any(kw in text for kw in ["三甲", "大医院", "权威", "专家"]):
+        prefs["hospital_level"] = "三甲"
+    elif any(kw in text for kw in ["二甲", "社区", "就近", "社区医院", "小医院"]):
+        prefs["hospital_level"] = "不限"
+        prefs["max_distance_km"] = min(prefs["max_distance_km"], 8)
+
+    # ── 出行方式偏好 ─────────────────────────────────────────────────
+    if any(kw in text for kw in ["开车", "自驾", "驾车"]):
+        prefs["travel_mode"] = "driving"
+    elif any(kw in text for kw in ["地铁", "公交", "公共交通"]):
+        prefs["travel_mode"] = "transit"
+
+    # ── 用户画像调整 ─────────────────────────────────────────────────
+    if profile:
+        age_group = profile.get("age_group", "adult")
+        if age_group == "elderly":
+            # 老年人：缩短可接受距离，偏好公交
+            prefs["max_distance_km"] = min(prefs["max_distance_km"], 10)
+        elif age_group == "child":
+            # 儿童：优先找儿童专科
+            prefs["hospital_level"] = "不限"   # 儿专科不一定是三甲综合
+
     return prefs
 
 

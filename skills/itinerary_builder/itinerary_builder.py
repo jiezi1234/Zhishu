@@ -140,36 +140,232 @@ def build(user_location: str,
 
 # ── 路线规划 ──────────────────────────────────────────────────────────────
 
-def _plan_route(origin: str, dest: str) -> dict:
-    """
-    调用百度地图 MCP。若不可用，返回估算值+地图链接。
-    """
-    import urllib.parse
-
+def _geocode(address: str, token: str) -> Optional[dict]:
+    """地理编码：地址字符串 → {lat, lng, name, address}。失败返回 None。"""
+    import requests
+    url = "https://api.map.baidu.com/agent_plan/v1/geocoding"
     try:
-        from baidu_map_mcp import route as baidu_route  # type: ignore
-        r = baidu_route(origin=origin, destination=dest, mode="transit")
-        return {
-            "mode":         "公共交通",
-            "distance_km":  r.get("distance_km", 0),
-            "duration_min": r.get("duration_min", 30),
-            "description":  r.get("description", ""),
-            "map_url":      _map_url(origin, dest),
-            "source":       "百度地图MCP",
-        }
-    except Exception:
-        pass
+        resp = requests.get(
+            url,
+            params={"address": address},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        result = data.get("result") or {}
+        loc = result.get("location") or {}
+        
+        geo_data = {}
+        if loc.get("lat") and loc.get("lng"):
+            geo_data = {"lat": loc["lat"], "lng": loc["lng"]}
+            
+            # 提取更详尽的信息以增强后面 direction API 的匹配度
+            poi_list = data.get("poi_infos", [])
+            if poi_list:
+                first_poi = poi_list[0]
+                geo_data["name"] = first_poi.get("name")
+                geo_data["address"] = first_poi.get("formatted_address")
+            elif result.get("level"):
+                # 如果是地址级别解析
+                geo_data["address"] = address # 兜底
+                
+            return geo_data
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[itinerary_builder] 地理编码失败: {e}")
+    return None
 
-    # 降级：仅提供地图链接
+def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> dict:
+    """
+    调用百度地图 Agent Plan API 获取真实的路线规划。
+    """
+    import os
+    import requests
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # 默认值（降级）
     dist_est = 5.0
-    return {
-        "mode":         "公共交通（建议）",
-        "distance_km":  dist_est,
+    fallback = {
+        "mode":         "建议路线",
+        "distance_km":  f"{dist_est:.1f}",
         "duration_min": int(dist_est * 4),
         "description":  f"请使用手机导航前往 {dest}",
         "map_url":      _map_url(origin, dest),
         "source":       "估算",
     }
+    
+    if depth > 1:
+        return fallback
+
+    if not token:
+        token = os.getenv("BAIDU_MAP_AUTH_TOKEN")
+    
+    if not token:
+        import logging
+        logging.getLogger(__name__).warning("No BAIDU_MAP_AUTH_TOKEN found, using fallback route.")
+        return fallback
+
+    try:
+        url = "https://api.map.baidu.com/agent_plan/v1/direction"
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # 尝试地理编码 origin 和 dest 以获得精准坐标和名称
+        origin_geo = _geocode(origin, token)
+        dest_geo = _geocode(dest, token)
+        
+        # 使用地理编码后的精准名称作为请求（如果有）
+        precise_origin = f"{origin_geo['name']}({origin_geo['address']})" if origin_geo and origin_geo.get('name') else origin
+        precise_dest = f"{dest_geo['name']}({dest_geo['address']})" if dest_geo and dest_geo.get('name') else dest
+        
+        # location 提示优先给起点
+        loc_str = f"{origin_geo['lat']},{origin_geo['lng']}" if origin_geo else "23.1291,113.2644"
+        
+        # 优化请求
+        data = {
+            "user_raw_request": f"帮我从{precise_origin}去{precise_dest}，请提供详细的公交或地铁换乘方案",
+            "location": loc_str
+        }
+        res = requests.post(url, headers=headers, data=data, timeout=10)
+        if res.status_code == 200:
+            res_data = res.json()
+            if res_data.get("status") == 0 and "result" in res_data:
+                result_obj = res_data["result"]
+                ans = result_obj.get("answer", "")
+                
+                # 若遇到 POI 澄清 (gptmodel_poi_clarify)
+                if result_obj.get("answer_type") == "gptmodel_poi_clarify":
+                    pois = result_obj.get("poi_clarify_data", {}).get("data", [])
+                    if pois:
+                        p = pois[0]
+                        info = p.get("info", {})
+                        name = info.get("name", "")
+                        addr = info.get("address", "")
+                        # 构造更精确的名称
+                        recursive_name = f"{name}({addr})" if addr else name
+                        
+                        # 记录距离作为最后底线
+                        dist_val = p.get("route", {}).get("distance_local", 0)
+                        if dist_val > 0:
+                            fallback["distance_km"] = f"{dist_val/1000.0:.1f}"
+                            fallback["description"] = f"预计距离大约 {dist_val/1000.0:.1f} 公里，由于位置重名较多，请在手机打开导航详情。"
+
+                        # 递归尝试
+                        if name and name != origin:
+                            return _plan_route(origin, recursive_name, token, depth + 1)
+                        else:
+                            return _plan_route(recursive_name, dest, token, depth + 1)
+
+                # 解析 navigation_data 中的详细步骤
+                if "navigation_data" in result_obj:
+                    nav_data = result_obj["navigation_data"]
+                    
+                    # 优先看公交方案，过滤掉纯骑行/长距离步行（对病患不友善）
+                    best_route = None
+                    for key in ["public_routes", "driving_routes", "walking_routes", "cycling_routes", "routes"]:
+                        if key in nav_data and nav_data[key]:
+                            candidate_routes = nav_data[key]
+                            for r in candidate_routes:
+                                # 检查是否有公交/地铁步骤 (vehicle_info type 为 3)
+                                has_transit = False
+                                for leg in r.get("steps", []):
+                                    steps_to_check = leg if isinstance(leg, list) else [leg]
+                                    for s in steps_to_check:
+                                        v_info = s.get("vehicle_info", {})
+                                        v_detail = v_info.get("detail", {}) if isinstance(v_info, dict) else {}
+                                        v_type = v_info.get("type") if isinstance(v_info, dict) else None
+                                        
+                                        # 必须是 transit 类型且有线路名称，或者指令包含公交/地铁关键词
+                                        if v_type == 3 and isinstance(v_detail, dict) and v_detail.get("name"):
+                                            has_transit = True
+                                            break
+                                        if any(k in s.get("instructions", "") for k in ["公交", "地铁", "乘坐", "换乘", "站"]):
+                                            has_transit = True
+                                            break
+                                    if has_transit: break
+                                if has_transit:
+                                    best_route = r
+                                    break
+                            
+                            if not best_route:
+                                best_route = candidate_routes[0]
+                            break
+                            
+                    if best_route:
+                        total_dist = best_route.get("distance", 0) / 1000.0
+                        total_dur = best_route.get("duration", 0) // 60
+                        
+                        instructions = []
+                        raw_steps = best_route.get("steps", [])
+                        for leg in raw_steps:
+                            if isinstance(leg, list):
+                                if not leg: continue
+                                step = leg[0]
+                            else:
+                                step = leg
+                            
+                            if not isinstance(step, dict): continue
+                            
+                            inst = step.get("instructions", "").strip()
+                            v_info = step.get("vehicle_info", {})
+                            detail = v_info.get("detail") if isinstance(v_info, dict) else None
+                            
+                            if detail and isinstance(detail, dict):
+                                if len(inst) < 5:
+                                    line_name = detail.get("name", "")
+                                    on_station = detail.get("on_station", "")
+                                    stop_num = detail.get("stop_num", 0)
+                                    if line_name and on_station:
+                                        inst = f"在 {on_station} 乘坐 {line_name} (经过{stop_num}站)"
+                            
+                            if not inst:
+                                road = step.get("road_name")
+                                dist = step.get("distance")
+                                if road and road != "无名路":
+                                    inst = f"沿 {road} 前行 {dist}米" if dist else f"进入 {road}"
+                                elif dist:
+                                    inst = f"前行 {dist}米"
+                                    
+                            if inst:
+                                instructions.append(inst)
+                        
+                        ans_detail = ""
+                        if instructions:
+                            unique_inst = []
+                            for i in instructions:
+                                if not unique_inst or i != unique_inst[-1]:
+                                    unique_inst.append(i)
+                            ans_detail = " -> ".join(unique_inst)
+                        else:
+                            ans_detail = nav_data.get("info", {}).get("tts_tips", "") or ans
+                            
+                        if not ans_detail:
+                            ans_detail = f"建议行程 {total_dist:.1f} 公里，预计 {total_dur} 分钟。"
+                            
+                        return {
+                            "mode":         "建议路线",
+                            "distance_km":  f"{total_dist:.1f}",
+                            "duration_min": total_dur,
+                            "description":  ans_detail,
+                            "map_url":      _map_url(origin, dest),
+                            "source":       "百度地图MCP",
+                        }
+                        
+                if ans:
+                    return {
+                        "mode":         "建议路线",
+                        "distance_km":  "", 
+                        "duration_min": "",
+                        "description":  ans,
+                        "map_url":      _map_url(origin, dest),
+                        "source":       "百度地图MCP",
+                    }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Baidu Map API error: {e}")
+        
+    return fallback
 
 
 def _map_url(origin: str, dest: str) -> str:
@@ -209,20 +405,21 @@ def _build_checklist(age_group: str, department: str) -> list:
 
 
 def _build_nav_steps(hospital_name: str, department: str, reg_info: dict) -> list:
-    """生成院内导引步骤（通用模板，后续可接入医院官网地图）"""
+    """生成院内导引步骤（详细版，包含具体分析）"""
     platform  = reg_info.get("registration_platform", "医院系统")
     reg_url   = reg_info.get("registration_url", "")
 
     steps = [
-        f"第一步【取号】：进入医院大厅，前往 1 楼「人工挂号/收费窗口」，出示医保卡并说明已在{platform}预约，领取号条。",
-        f"第二步【找科室】：按门诊楼导引牌，找到【{department}候诊区】，通常在 2-3 楼。",
-        "第三步【签到候诊】：在科室护士台或自助签到机完成签到，然后坐等屏幕叫号。",
-        "第四步【就诊】：医生叫到您的名字后进入诊室，将携带的检查报告一并交给医生。",
-        "第五步【缴费/检查】：根据医生开具的处方或检查单，按导引牌完成缴费和检查项目。",
+        f"【取号】进入{hospital_name}大厅，前往1楼「人工挂号/收费窗口」或自助机，出示医保卡并说明已在{platform}预约，领取号条。如未预约，现场挂号需排队约15-30分钟。",
+        f"【找科室】按门诊楼导引牌，找到【{department}候诊区】。大型三甲医院通常在2-3楼设专科门诊，部分医院{department}可能在独立楼层，建议到达后询问导医台。",
+        f"【签到候诊】在{department}护士台或自助签到机完成签到（需刷医保卡或扫码），然后坐等屏幕叫号。高峰时段（8:00-10:00）候诊时间较长，建议提前30分钟到达。",
+        "【就诊】医生叫到您的名字后进入诊室，将携带的检查报告、既往病历一并交给医生。就诊时长通常5-15分钟，请提前整理好症状描述和想咨询的问题。",
+        "【缴费/检查】根据医生开具的处方或检查单，按导引牌前往缴费窗口（或使用手机支付），然后到相应科室完成检查项目。抽血化验通常在1楼检验科，影像检查（X光/CT/MRI）在放射科，需提前预约时间段。",
+        "【取药/复诊】缴费后凭处方到药房取药（门诊药房通常在1楼），如需复诊请在护士台预约下次就诊时间。慢性病患者可咨询是否支持线上复诊和药品配送。",
     ]
 
     if reg_url:
-        steps.insert(0, f"提前准备：如尚未挂号，请访问 {reg_url} 完成预约。")
+        steps.insert(0, f"【提前准备】如尚未挂号，请访问 {reg_url} 完成预约。建议提前1-3天预约，热门专家号需提前7天抢号。")
 
     return steps
 
