@@ -4,6 +4,41 @@ This folder is home. Treat it that way.
 
 ## 🚨 Highest-Priority Rules
 
+### 📋 Skills 优先级规则
+
+#### 医疗相关任务（关键词：医院、挂号、就医、看医生、医疗咨询）
+
+**详见 `SKILL_PREFERENCES.md`**（五步工作流、各 skill 触发条件、决策速查表、禁止做法）。
+
+**🔴 强制执行规则（不得跳过，不得等用户提醒）：**
+
+每次处理就医相关请求，必须完整走完以下五步，缺任何一步都算任务未完成：
+
+1. **症状分诊**：调用 `healthpath-symptom-triage` 推荐科室（用户已明确科室时可跳过）
+2. **医院匹配**：调用 `healthpath-hospital-matcher`，让用户选定医院
+3. **挂号链接**：用户选定医院后，**必须立即**调用 `healthpath-registration-fetcher` 获取官网挂号 URL，不得跳过，不得编造链接
+4. **路线规划**：调用百度地图 MCP 规划从用户出发地到医院的路线（不可用时降级估算，注明"仅供参考"）
+5. **生成 PDF**：**必须**调用 `healthpath-itinerary-builder` 生成就医行程单 PDF，这是每次就医流程的**默认终态**，无需用户要求，直接生成并告知文件路径
+
+**⚠️ 特别说明：**
+- PDF 行程单是标配输出，不是可选功能。只要流程走到第 5 步，就必须生成。
+- 不要在生成 PDF 前询问"需要生成 PDF 吗"，直接生成。
+- 挂号链接必须来自 `registration-fetcher`，禁止自行猜测或编造。
+
+#### 其他 skill 使用优先级
+
+- **网络搜索**：优先使用 `autoglm-websearch`（实时、准确）而非 `web_fetch`（静态）
+- **浏览器控制**：优先使用 `browser` 工具而非 `autoglm-browser-agent`（后者更复杂）
+- **文档阅读**：优先使用 `feishu-doc`（飞书）而非 `web_fetch`（本地文档）
+
+#### 学习新 skill 的流程
+
+当使用陌生的 skill 时：
+1. **先读 SKILL.md**（不要直接读源码）
+2. 查看 `Example Usage` 部分
+3. 只有文档不清楚时，才读源代码
+4. 如果 SKILL.md 有错误或缺失，立即更新它
+
 ### Permission Control
 
 - **Owner** has the highest authority and is the only person allowed to modify permissions, configuration, or security policies.
@@ -181,41 +216,6 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 ## Tools
 
 Skills provide your tools. Check each skill's `SKILL.md` when you need one. Keep environment-specific notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
-
-### 📋 Skills 优先级规则
-
-#### 医疗相关任务（关键词：医院、挂号、就医、看医生、医疗咨询）
-
-**详见 `SKILL_PREFERENCES.md`**（五步工作流、各 skill 触发条件、决策速查表、禁止做法）。
-
-**🔴 强制执行规则（不得跳过，不得等用户提醒）：**
-
-每次处理就医相关请求，必须完整走完以下五步，缺任何一步都算任务未完成：
-
-1. **症状分诊**：调用 `healthpath-symptom-triage` 推荐科室（用户已明确科室时可跳过）
-2. **医院匹配**：调用 `healthpath-hospital-matcher`，让用户选定医院
-3. **挂号链接**：用户选定医院后，**必须立即**调用 `healthpath-registration-fetcher` 获取官网挂号 URL，不得跳过，不得编造链接
-4. **路线规划**：调用百度地图 MCP 规划从用户出发地到医院的路线（不可用时降级估算，注明"仅供参考"）
-5. **生成 PDF**：**必须**调用 `healthpath-itinerary-builder` 生成就医行程单 PDF，这是每次就医流程的**默认终态**，无需用户要求，直接生成并告知文件路径
-
-**⚠️ 特别说明：**
-- PDF 行程单是标配输出，不是可选功能。只要流程走到第 5 步，就必须生成。
-- 不要在生成 PDF 前询问"需要生成 PDF 吗"，直接生成。
-- 挂号链接必须来自 `registration-fetcher`，禁止自行猜测或编造。
-
-#### 其他 skill 使用优先级
-
-- **网络搜索**：优先使用 `autoglm-websearch`（实时、准确）而非 `web_fetch`（静态）
-- **浏览器控制**：优先使用 `browser` 工具而非 `autoglm-browser-agent`（后者更复杂）
-- **文档阅读**：优先使用 `feishu-doc`（飞书）而非 `web_fetch`（本地文档）
-
-#### 学习新 skill 的流程
-
-当使用陌生的 skill 时：
-1. **先读 SKILL.md**（不要直接读源码）
-2. 查看 `Example Usage` 部分
-3. 只有文档不清楚时，才读源代码
-4. 如果 SKILL.md 有错误或缺失，立即更新它
 
 ### Platform Formatting
 
