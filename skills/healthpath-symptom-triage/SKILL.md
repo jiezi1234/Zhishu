@@ -4,6 +4,8 @@ description: Triage user symptoms via semantic search over yixue.com knowledge b
 metadata:
   openclaw:
     emoji: "🩺"
+    platforms: ["Windows", "Linux", "macOS"]
+    windows_note: "必须使用脚本方式调用，避免 PowerShell GBK 编码问题"
     requires:
       bins: ["python3"]
       python:
@@ -57,6 +59,46 @@ route → 科室映射          ← _ROUTE_DEPT 前缀匹配表
 
 ## 调用方式
 
+### 方式 1：Python 脚本（推荐，避免编码问题）
+
+创建临时脚本 `temp_triage.py`：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import sys
+import json
+import os
+
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.insert(0, 'skills/healthpath-symptom-triage')
+from symptom_triage import triage
+
+result = triage(
+    symptom_text="用户症状描述",
+    user_profile={"age_group": "adult"}  # "elderly" | "adult" | "child"
+)
+print(json.dumps(result, ensure_ascii=False, indent=2))
+```
+
+然后执行（**Windows PowerShell 必须用分号分隔，不能用 &&**）：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_triage.py
+```
+
+**为什么用脚本？** Windows PowerShell 的 GBK 编码会导致 UnicodeEncodeError，脚本方式可以正确处理 UTF-8 和特殊符号（如 ⚠️）。
+
+**⚠️ PowerShell 语法注意：**
+- ❌ 错误：`cd E:\homework\Zhishu && $env:PYTHONIOENCODING='utf-8' && python temp_triage.py`
+  - PowerShell 中 `&&` 不是有效的链接符，会导致 ParserError
+- ✅ 正确：`cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_triage.py`
+  - 用分号 `;` 分隔多条命令
+- 或者用 `cmd /c` 包装（支持 `&&`）：`cmd /c "cd E:\homework\Zhishu && set PYTHONIOENCODING=utf-8 && python temp_triage.py"`
+
+### 方式 2：直接 Python 调用（仅限 Linux/macOS）
+
 ```python
 from symptom_triage import triage
 
@@ -103,9 +145,50 @@ search_knowledge()
 
 ## 注意事项
 
+### 编码与平台兼容性
+
+**Windows 特殊处理（必须）：**
+- PowerShell 默认 GBK 编码，直接运行 Python 会导致 `UnicodeEncodeError`
+- 解决方案：**必须使用脚本方式**（见"调用方式"第一部分）
+- 脚本中设置 `PYTHONIOENCODING='utf-8'` 和 `sys.stdout.reconfigure(encoding='utf-8')`
+- 输出 JSON 时使用 `ensure_ascii=False` 保留中文和特殊符号
+
+**Linux/macOS：** 可直接调用，无需额外处理
+
+### 用户信息处理
+
 - 用户为老年人（`age_group=elderly`）时，判断文本加入老年人专项提示
 - 用户为儿童（`age_group=child`）时，科室列表置顶儿科
 - `disclaimer` 内容每次必须原文展示给用户，不得省略
+
+## 常见问题
+
+### Q: 执行时出现 `ParserError` 或 `InvalidEndOfLine`
+
+**原因：** PowerShell 不支持 `&&` 链接符。
+
+**解决：** 用分号 `;` 替代：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_triage.py
+```
+
+### Q: 输出乱码或 `UnicodeEncodeError`
+
+**原因：** PowerShell 默认 GBK 编码，Python 输出 UTF-8 中文时冲突。
+
+**解决：** 
+1. 确保脚本中有 `sys.stdout.reconfigure(encoding='utf-8')`
+2. 确保 JSON 输出用 `ensure_ascii=False`
+3. 执行前设置 `$env:PYTHONIOENCODING='utf-8'`
+
+### Q: 模型首次下载很慢
+
+**原因：** 首次运行需从 HuggingFace 下载 90MB 模型。
+
+**解决：** 
+- 确保网络连接正常
+- 模型会缓存到 `~/.cache/huggingface/hub/`，后续运行秒速加载
+- 可通过 `HF_ENDPOINT` 环境变量切换镜像源
 
 ## 免责声明（固定文本）
 

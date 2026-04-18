@@ -31,6 +31,39 @@ Things like:
 - Default speaker: Kitchen HomePod
 ```
 
+## Windows Python Skill 调用最佳实践
+
+**问题：** PowerShell 默认 GBK 编码，直接运行 Python 会导致 `UnicodeEncodeError`（特别是输出含中文和特殊符号时）
+
+**解决方案：** 对于需要 UTF-8 输出的 Python skill（如 healthpath-symptom-triage），使用脚本包装：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import sys
+import json
+import os
+
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.insert(0, 'skills/skill-name')
+from module import function
+
+result = function(args)
+print(json.dumps(result, ensure_ascii=False, indent=2))
+```
+
+执行：
+```bash
+cd E:\homework\Zhishu
+$env:PYTHONIOENCODING='utf-8'
+python temp_script.py
+```
+
+**适用 skill：**
+- healthpath-symptom-triage（输出含 ⚠️ 符号）
+
 ## Why Separate?
 
 Skills are shared. Your setup is yours. Keeping them apart means you can update skills without losing your notes, and share skills without leaking your infrastructure.

@@ -42,6 +42,57 @@ metadata:
 
 ## 调用方式
 
+### 方式 1：Python 脚本（推荐，避免编码问题）
+
+创建临时脚本 `temp_itinerary.py`：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import sys
+import json
+import os
+
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.insert(0, 'skills/healthpath-itinerary-builder')
+from itinerary_builder import build
+
+result = build(
+    user_location     = "北京市朝阳区望京街道",
+    hospital_name     = "北京协和医院",
+    hospital_address  = "北京市东城区帅府园1号",
+    department        = "神经内科",
+    registration_info = {
+        "hospital_name": "北京协和医院",
+        "official_url": "https://www.pumch.ac.cn/",
+        "from_cache": True,
+        "timestamp": "2026-04-18T10:00:00"
+    },
+    appointment_time  = "2026-04-16 09:00",
+    output_format     = "large_font_pdf",
+    user_profile      = {"age_group": "elderly"},
+)
+print(json.dumps(result, ensure_ascii=False, indent=2))
+```
+
+然后执行（**Windows PowerShell 必须用分号分隔，不能用 &&**）：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_itinerary.py
+```
+
+**为什么用脚本？** Windows PowerShell 的 GBK 编码会导致 UnicodeEncodeError，脚本方式可以正确处理 UTF-8 中文输出。
+
+**⚠️ PowerShell 语法注意：**
+- ❌ 错误：`cd E:\homework\Zhishu && $env:PYTHONIOENCODING='utf-8' && python temp_itinerary.py`
+  - PowerShell 中 `&&` 不是有效的链接符，会导致 ParserError
+- ✅ 正确：`cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_itinerary.py`
+  - 用分号 `;` 分隔多条命令
+- 或者用 `cmd /c` 包装（支持 `&&`）：`cmd /c "cd E:\homework\Zhishu && set PYTHONIOENCODING=utf-8 && python temp_itinerary.py"`
+
+### 方式 2：直接 Python 调用（仅限 Linux/macOS）
+
 ```python
 from skills.itinerary_builder.itinerary_builder import build
 
@@ -86,6 +137,70 @@ add_to_blacklist("某医院名称", reason="用户反馈：态度差")
 - `appointment_time` 未传入时，`depart_time` 输出为"建议就诊前 N 分钟出发"的相对描述
 - `output/` 目录不存在时自动创建；该目录已在 `.gitignore` 中排除
 - 本 skill 是**流程终态**，不应在其输出基础上再调用其他 skill
+
+## 编码与平台兼容性
+
+**Windows 特殊处理（必须）：**
+- PowerShell 默认 GBK 编码，直接运行 Python 会导致 `UnicodeEncodeError`
+- 解决方案：**必须使用脚本方式**（见"调用方式"第一部分）
+- 脚本中设置 `PYTHONIOENCODING='utf-8'` 和 `sys.stdout.reconfigure(encoding='utf-8')`
+- 输出 JSON 时使用 `ensure_ascii=False` 保留中文
+
+**Linux/macOS：** 可直接调用，无需额外处理
+
+## 常见问题
+
+### Q: 执行时出现 `ParserError` 或 `InvalidEndOfLine`
+
+**原因：** PowerShell 不支持 `&&` 链接符。
+
+**解决：** 用分号 `;` 替代：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_itinerary.py
+```
+
+### Q: 输出乱码或 `UnicodeEncodeError`
+
+**原因：** PowerShell 默认 GBK 编码，Python 输出 UTF-8 中文时冲突。
+
+**解决：** 
+1. 确保脚本中有 `sys.stdout.reconfigure(encoding='utf-8')`
+2. 确保 JSON 输出用 `ensure_ascii=False`
+3. 执行前设置 `$env:PYTHONIOENCODING='utf-8'`
+
+### Q: PDF 中文显示为方框或乱码
+
+**原因：** 系统缺少中文字体或 reportlab 未找到字体文件。
+
+**解决：** 
+- 确保 Windows 系统字体目录（`C:\Windows\Fonts`）包含 `simhei.ttf` / `msyh.ttc` / `simsun.ttc`
+- 或手动指定字体路径（需修改 `itinerary_builder.py` 中的字体查找逻辑）
+- 降级方案：使用 `output_format="pdf"` 生成标准版（字体更小，兼容性更好）
+
+### Q: 生成的是 .txt 文件而不是 PDF
+
+**原因：** `reportlab` 库未安装，系统自动降级。
+
+**解决：** 
+- 安装 reportlab：`pip install reportlab`
+- 或接受 .txt 输出（功能完整，仅格式不同）
+
+### Q: 路线规划显示"仅供参考"
+
+**原因：** 百度地图 MCP 不可用，使用粗估距离和时间。
+
+**解决：** 
+- 设置 `BAIDU_MAP_AUTH_TOKEN` 环境变量启用精确路线规划
+- 粗估路线仍可用于初步参考，但建议用户以实际导航为准
+
+### Q: 出发时间计算不准确
+
+**原因：** 未传入 `appointment_time` 或路线时间为粗估值。
+
+**解决：** 
+- 确保传入准确的 `appointment_time`（ISO 格式，如 "2026-04-16 09:00"）
+- 启用百度地图 MCP 获取精确出行时间
+- 系统会自动加 30 分钟院内缓冲时间
 
 ## 完整调用链示意
 

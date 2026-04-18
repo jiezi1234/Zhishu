@@ -53,6 +53,46 @@ metadata:
 
 ## 调用方式
 
+### 方式 1：Python 脚本（推荐，避免编码问题）
+
+创建临时脚本 `temp_intent.py`：
+
+```python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import sys
+import json
+import os
+
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+
+sys.path.insert(0, 'skills/healthpath-intent-understanding')
+from intent_parser import parse_intent
+
+result = parse_intent(
+    user_input="老人这两天腰疼，帮我找本周可挂上的骨科号，做大字版行程单",
+    use_deepseek=True   # False 强制走本地解析
+)
+print(json.dumps(result, ensure_ascii=False, indent=2))
+```
+
+然后执行（**Windows PowerShell 必须用分号分隔，不能用 &&**）：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_intent.py
+```
+
+**为什么用脚本？** Windows PowerShell 的 GBK 编码会导致 UnicodeEncodeError，脚本方式可以正确处理 UTF-8 中文输出。
+
+**⚠️ PowerShell 语法注意：**
+- ❌ 错误：`cd E:\homework\Zhishu && $env:PYTHONIOENCODING='utf-8' && python temp_intent.py`
+  - PowerShell 中 `&&` 不是有效的链接符，会导致 ParserError
+- ✅ 正确：`cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_intent.py`
+  - 用分号 `;` 分隔多条命令
+- 或者用 `cmd /c` 包装（支持 `&&`）：`cmd /c "cd E:\homework\Zhishu && set PYTHONIOENCODING=utf-8 && python temp_intent.py"`
+
+### 方式 2：直接 Python 调用（仅限 Linux/macOS）
+
 ```python
 from intent_parser import parse_intent
 
@@ -90,3 +130,50 @@ task = parse_intent(
 
 - `semantic_matcher`（`config/semantic_matcher.py`）与 `symptom_triage` skill **共享同一模型单例**，同进程内不重复加载
 - 模型缓存、镜像源配置见 `healthpath-symptom-triage` SKILL.md
+
+## 编码与平台兼容性
+
+**Windows 特殊处理（必须）：**
+- PowerShell 默认 GBK 编码，直接运行 Python 会导致 `UnicodeEncodeError`
+- 解决方案：**必须使用脚本方式**（见"调用方式"第一部分）
+- 脚本中设置 `PYTHONIOENCODING='utf-8'` 和 `sys.stdout.reconfigure(encoding='utf-8')`
+- 输出 JSON 时使用 `ensure_ascii=False` 保留中文
+
+**Linux/macOS：** 可直接调用，无需额外处理
+
+## 常见问题
+
+### Q: 执行时出现 `ParserError` 或 `InvalidEndOfLine`
+
+**原因：** PowerShell 不支持 `&&` 链接符。
+
+**解决：** 用分号 `;` 替代：
+```powershell
+cd E:\homework\Zhishu; $env:PYTHONIOENCODING='utf-8'; python temp_intent.py
+```
+
+### Q: 输出乱码或 `UnicodeEncodeError`
+
+**原因：** PowerShell 默认 GBK 编码，Python 输出 UTF-8 中文时冲突。
+
+**解决：** 
+1. 确保脚本中有 `sys.stdout.reconfigure(encoding='utf-8')`
+2. 确保 JSON 输出用 `ensure_ascii=False`
+3. 执行前设置 `$env:PYTHONIOENCODING='utf-8'`
+
+### Q: 模型首次下载很慢
+
+**原因：** 首次运行需从 HuggingFace 下载 90MB 模型（与 symptom-triage 共享）。
+
+**解决：** 
+- 确保网络连接正常
+- 模型会缓存到 `~/.cache/huggingface/hub/`，后续运行秒速加载
+- 可通过 `HF_ENDPOINT` 环境变量切换镜像源
+
+### Q: DeepSeek API 调用失败
+
+**原因：** 未设置 `DEEPSEEK_API_KEY` 环境变量或 API 配额不足。
+
+**解决：** 
+- 系统会自动降级为本地解析，功能完整
+- 若需使用 API，在 `.env` 文件中配置 `DEEPSEEK_API_KEY`
