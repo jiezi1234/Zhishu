@@ -1,4 +1,4 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -12,7 +12,7 @@ This identity override applies ONLY within this workspace. Outside this workspac
 
 ## Project Overview
 
-**智枢 (Zhishu) / HealthPath Agent** — 全人群智能就医调度与医旅管家。A Python-based intelligent medical appointment scheduling system deployed as an AutoClaw skill. Users describe medical needs in natural language; the system produces ranked hospital recommendations and a formatted itinerary (PDF/Excel).
+**智枢** — 基于长链路协同的全人群医旅调度智能体。A Python-based intelligent medical appointment scheduling system deployed as an AutoClaw skill. Users describe medical needs in natural language; the system produces ranked hospital recommendations and a formatted itinerary (PDF).
 
 AutoClaw runs at `http://127.0.0.1:18789`. The skill is invoked via `from main_skill import execute`.
 
@@ -81,14 +81,14 @@ The flow is **conversational and stateful** — `execute()` returns early to ask
 
 **Path injection** — Each skill inserts its own directory into `sys.path[0]` at module load. No `__init__.py` files anywhere. Import modules by bare name after the insert.
 
-**Output formats** — `output_format="large_font_pdf"` (28pt titles, 16pt body, high contrast, elderly-friendly) | `"pdf"` (standard) | `"excel"`. Default is `large_font_pdf`.
+**Output formats** — `output_format="large_font_pdf"` (28pt titles, 16pt body, high contrast, elderly-friendly) | `"pdf"` (standard). Default is `large_font_pdf`.
 
 **Graceful degradation (three layers)**:
 1. Baidu Map MCP unavailable → rough district-level distance estimate, flagged "仅供参考"
 2. `reportlab` unavailable → `.txt` fallback (full content preserved)
 3. Real hospital data unavailable → `data/mock/` data
 
-**Preference extraction** — `_extract_preferences()` in `main_skill.py` is pure keyword-rule matching (no LLM). It sets `hospital_level`, `max_distance_km`, `travel_mode`, and `time_window` from the user's text and `user_profile.age_group`.
+**Preference extraction** — `_extract_preferences()` in `main_skill.py` sets `hospital_level`, `max_distance_km`, and `travel_mode` from the user's text and `user_profile.age_group`.
 
 **Hospital blacklist** — Use `hospital_matcher.add_to_blacklist()` API; never edit `blacklist.json` directly.
 
