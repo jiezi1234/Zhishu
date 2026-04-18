@@ -1,15 +1,17 @@
-{
+﻿{
   "name": "healthpath-agent",
-  "version": "1.0.0",
-  "description": "智能医疗就诊路线规划系统，帮助用户找到最合适的医院和医生",
+  "version": "2.0.0",
+  "description": "智能医疗就诊路线规划系统，帮助用户完成从症状到就医行程单的全流程决策",
   "author": "HealthPath Team",
   "license": "MIT",
   "entry_point": "main_skill.execute",
   "info_endpoint": "main_skill.get_info",
   "capabilities": [
     "自然语言理解",
-    "医院号源搜索",
-    "多维度评分排序",
+    "症状分诊",
+    "医院匹配",
+    "挂号链接采集",
+    "路线规划",
     "PDF文档生成"
   ],
   "input_schema": {
@@ -33,28 +35,29 @@
     "properties": {
       "status": {
         "type": "string",
-        "enum": ["success", "error", "no_results"],
-        "description": "执行状态"
+        "enum": [
+          "success",
+          "need_more_info",
+          "need_location",
+          "awaiting_hospital_selection",
+          "emergency_warning",
+          "no_hospitals_found",
+          "error"
+        ]
       },
-      "steps": {
-        "type": "object",
-        "description": "各个步骤的执行结果"
-      },
-      "final_output": {
-        "type": "object",
-        "description": "最终输出（PDF文件路径等）"
-      },
-      "error": {
-        "type": "string",
-        "description": "错误信息（如果有）"
-      }
+      "steps": {"type": "object"},
+      "final_output": {"type": "object"},
+      "follow_up": {"type": "array"},
+      "error": {"type": "string"}
     }
   },
   "dependencies": [
-    "skill_1_intent",
-    "skill_2_crawl",
-    "skill_3_decision",
-    "skill_4_output"
+    "healthpath-intent-understanding",
+    "healthpath-symptom-triage",
+    "healthpath-hospital-matcher",
+    "healthpath-registration-fetcher",
+    "healthpath-itinerary-builder",
+    "baidu-ai-map"
   ],
   "tags": [
     "medical",
@@ -62,11 +65,5 @@
     "appointment",
     "hospital",
     "elderly-friendly"
-  ],
-  "performance": {
-    "average_response_time_ms": 5000,
-    "max_response_time_ms": 30000,
-    "cache_enabled": true,
-    "cache_ttl_hours": 24
-  }
+  ]
 }

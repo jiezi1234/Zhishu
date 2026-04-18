@@ -8,7 +8,7 @@ class Config:
     """Configuration management for HealthPath Agent"""
 
     # DeepSeek API Configuration
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-cef4d7205b2e4ba29f8052f52e192c80")
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_API_BASE = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1")
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 

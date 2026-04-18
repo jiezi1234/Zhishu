@@ -1,4 +1,4 @@
-"""
+﻿"""
 hospital_matcher.py — 附近医院匹配与推荐
 
 职责：
@@ -41,7 +41,7 @@ _SKILL_DIR     = os.path.dirname(os.path.abspath(__file__))
 JSON_PATH      = os.path.join(_SKILL_DIR, "hospitals.json")
 CSV_PATH       = os.path.join(_ROOT, "data", "医疗机构基本信息2023-03-29.csv")
 BLACKLIST_PATH = os.path.join(_SKILL_DIR, "blacklist.json")
-CACHE_PATH     = os.path.join(_ROOT, "skills", "registration_fetcher", "hospital_info.json")
+CACHE_PATH     = os.path.join(_ROOT, "skills", "healthpath-registration-fetcher", "hospital_info.json")
 
 YIXUE_BASE = "https://www.yixue.com/"
 
@@ -539,3 +539,4 @@ if __name__ == "__main__":
     print(f"\n候选医院:")
     for c in result["candidates"]:
         print(f"  {c['hospital_name']} | {c['distance_km']}km | {c['level']}")
+

@@ -23,7 +23,7 @@ try:
     from reportlab.lib.units import cm
     from reportlab.platypus import (
         SimpleDocTemplate, Spacer, Table,
-        TableStyle, Flowable
+        TableStyle, Flowable, KeepTogether
     )
     from reportlab.lib import colors
     from reportlab.pdfbase import pdfmetrics
@@ -154,11 +154,26 @@ class CardFlowable(Flowable):
         self.font_name = font_name
         self.fs = fs
         self._avail_width = 0
+        self.hAlign = 'LEFT'  # 设置对齐方式
 
     def wrap(self, available_width, available_height):
         self._avail_width = available_width
         h = self._content_height() + CARD_PADDING_V * 2
         return available_width, h
+
+    def split(self, available_width, available_height):
+        """
+        允许卡片在页面底部被分割。
+        如果可用高度太小（< 100pt），返回空列表让卡片移到下一页。
+        """
+        content_h = self._content_height() + CARD_PADDING_V * 2
+
+        # 如果可用高度太小（< 100pt）或者卡片太大放不下，移到下一页
+        if available_height < 100 or content_h > available_height:
+            return []
+
+        # 卡片能完整放下，不需要分割
+        return [self]
 
     def _content_height(self) -> float:
         raise NotImplementedError
@@ -351,12 +366,13 @@ class RouteCardFlowable(CardFlowable):
 
 # ── 卡片3：挂号链接 ───────────────────────────────────────────────────────
 class RegistrationCardFlowable(CardFlowable):
-    """挂号官网、平台、注意事项。"""
+    """挂号官网、平台、注意事项 + 挂号指导步骤。"""
 
     def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
         self.task_params = task_params
-        # 只保留非空字段
+
+        # 基本信息行
         all_rows = [
             ('挂号平台', task_params.get('registration_platform', '')),
             ('官网/链接', task_params.get('registration_url', '')),
@@ -366,36 +382,76 @@ class RegistrationCardFlowable(CardFlowable):
         self._rows = [(label, value) for label, value in all_rows if value and value != '—']
         self._row_h = fs.body + 10
 
+        self._layout = []
+        self._total_height = 0
+
+    def wrap(self, available_width, available_height):
+        self._avail_width = available_width
+        self._calc_layout(available_width)
+        h = self._content_height() + CARD_PADDING_V * 2
+        return available_width, h
+
+    def _calc_layout(self, w: float):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        self._layout = []
+        self._total_height = self.fs.title + 8
+        x_value = self._x0() + 68
+        max_w = w - x_value - CARD_PADDING_H
+
+        for label, val in self._rows:
+            lines = []
+            curr = ""
+            for char in val:
+                t = curr + char
+                if stringWidth(t, self.font_name, self.fs.body) <= max_w:
+                    curr = t
+                else:
+                    if curr: lines.append(curr)
+                    curr = char
+            if curr:
+                lines.append(curr)
+            if not lines:
+                lines = [""]
+            
+            row_h = 4 * 2 + len(lines) * (self.fs.body + 6)
+            self._layout.append((label, lines, row_h))
+            self._total_height += row_h
+
     def _content_height(self) -> float:
         if not self._rows:
             return 0
-        return self.fs.title + 8 + len(self._rows) * self._row_h
+        return self._total_height
 
     def _draw_content(self, card_w: float, card_h: float):
         if not self._rows:
             return
-        title_y    = self._draw_title("🔗  挂号信息", card_h)
-        x_label    = self._x0()
-        x_value    = x_label + 68
+        title_y = self._draw_title("🔗  挂号信息", card_h)
+        x_label = self._x0()
+        x_value = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
         y = title_y - 6
-        for i, (label, value) in enumerate(self._rows):
-            row_bot = y - self._row_h
+
+        pad_y = 4
+        # 绘制基本信息
+        for i, (label, lines, row_h) in enumerate(self._layout):
+            row_bot = y - row_h
             self.canv.saveState()
             self.canv.setFont(self.font_name, self.fs.label)
             self.canv.setFillColor(COLORS['text_secondary'])
-            self.canv.drawString(x_label, row_bot + 4, label)
-            self.canv.setFont(self.font_name, self.fs.body)
-            # 链接用蓝色，不截断
+            self.canv.drawString(x_label, y - pad_y - self.fs.label, label)
+            
+            # 链接用蓝色
             if label == '官网/链接':
                 self.canv.setFillColor(COLORS['primary'])
-                display = value
             else:
                 self.canv.setFillColor(COLORS['text'])
-                max_chars = int((card_w - x_value - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
-                display = value[:max_chars] + ('…' if len(value) > max_chars else '')
-            self.canv.drawString(x_value, row_bot + 4, display)
-            if i < len(self._rows) - 1:
+                
+            self.canv.setFont(self.font_name, self.fs.body)
+            for j, line in enumerate(lines):
+                ly = y - pad_y - self.fs.body - (j * (self.fs.body + 6))
+                self.canv.drawString(x_value, ly, line)
+                
+            if i < len(self._layout) - 1:
                 self.canv.setStrokeColor(COLORS['divider'])
                 self.canv.setLineWidth(0.5)
                 self.canv.line(x_label, row_bot, divider_x2, row_bot)
@@ -403,14 +459,97 @@ class RegistrationCardFlowable(CardFlowable):
             y = row_bot
 
 
+class RegistrationGuideCardFlowable(CardFlowable):
+    """挂号指导步骤卡片"""
+
+    def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
+        super().__init__(font_name, fs)
+        self.task_params = task_params
+        
+        reg_url = task_params.get('registration_url', '')
+        if reg_url:
+            self._guide_steps = [
+                "📱 线上挂号：打开上方链接 → 注册登录 → 选择科室医生 → 预约时间 → 支付",
+                "🏥 现场挂号：携带身份证医保卡 → 挂号窗口/自助机 → 告知科室",
+            ]
+        else:
+            self._guide_steps = [
+                "📱 线上挂号：微信搜索「京医通」或「健康广东」→ 搜索医院 → 预约",
+                "🏥 现场挂号：携带身份证医保卡 → 挂号窗口/自助机 → 告知科室",
+                "☎️ 电话预约：拨打医院预约电话（官网查询）→ 按提示选择",
+            ]
+            
+        self._row_h = fs.body + 9
+
+    def _wrap_text(self, text: str, max_width: float) -> list:
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        lines = []
+        words = text
+        current_line = ""
+
+        for char in words:
+            test_line = current_line + char
+            width = stringWidth(test_line, self.font_name, self.fs.body - 1)
+            if width <= max_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = char
+
+        if current_line:
+            lines.append(current_line)
+
+        return lines if lines else [text]
+
+    def _content_height(self) -> float:
+        if not self._guide_steps:
+            return 0
+        total_lines = 0
+        max_width = 400
+        for step in self._guide_steps:
+            if not step: continue
+            lines = self._wrap_text(step, max_width)
+            total_lines += len(lines)
+        return self.fs.title + 8 + total_lines * self._row_h
+
+    def _draw_content(self, card_w: float, card_h: float):
+        if not self._guide_steps: return
+        title_y = self._draw_title("🧭  挂号指导", card_h)
+        x0      = self._x0()
+        max_width = card_w - x0 - CARD_PADDING_H
+        y = title_y - 6
+
+        for step in self._guide_steps:
+            if not step: continue
+            lines = self._wrap_text(step, max_width)
+            
+            self.canv.saveState()
+            # 首行如果是标题带 emoji 的可以加粗着色
+            if step.startswith(('📱', '🏥', '☎️')):
+                self.canv.setFillColor(COLORS['text'])
+                self.canv.setFont(self.font_name, self.fs.body)
+            else:
+                self.canv.setFillColor(COLORS['text_secondary'])
+                self.canv.setFont(self.font_name, self.fs.body - 1)
+                
+            for i, line in enumerate(lines):
+                row_bot = y - self._row_h
+                ly = row_bot + 4
+                self.canv.drawString(x0, ly, line)
+                y = row_bot
+            self.canv.restoreState()
+
+
 # ── 卡片4：就医方案（院内导引） ───────────────────────────────────────────
 class NavStepsCardFlowable(CardFlowable):
     """院内导引步骤卡片，每步一行，支持自动换行。"""
 
-    def __init__(self, nav_steps: list, font_name: str, fs: FontSizes):
+    def __init__(self, nav_steps: list, font_name: str, fs: FontSizes, title: str = "📋  就医方案"):
         super().__init__(font_name, fs)
         self.nav_steps = nav_steps or ['请按医院指示牌前往对应科室。']
         self._row_h = fs.body + 9
+        self.title = title
 
     def _wrap_text(self, text: str, max_width: float) -> list:
         """将长文本按宽度拆分成多行"""
@@ -444,7 +583,7 @@ class NavStepsCardFlowable(CardFlowable):
         return self.fs.title + 8 + total_lines * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        title_y = self._draw_title("📋  就医方案", card_h)
+        title_y = self._draw_title(self.title, card_h)
         x0      = self._x0()
         max_width = card_w - x0 - CARD_PADDING_H
         y = title_y - 6
@@ -600,16 +739,29 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
         elements.append(RouteCardFlowable(task_params, font_name, fs))
         elements.append(Spacer(1, CARD_SPACING))
 
-        # 卡片3：挂号链接（仅在有数据时显示）
+        # 卡片3：挂号链接基本信息
         reg_card = RegistrationCardFlowable(task_params, font_name, fs)
-        if reg_card._rows:  # 只有非空字段时才添加
+        if reg_card._rows:
             elements.append(reg_card)
             elements.append(Spacer(1, CARD_SPACING))
 
-        # 卡片4：就医方案（院内导引）
+        # 卡片3.5：挂号指导步骤
+        reg_guide_card = RegistrationGuideCardFlowable(task_params, font_name, fs)
+        if reg_guide_card._guide_steps:
+            elements.append(reg_guide_card)
+            elements.append(Spacer(1, CARD_SPACING))
+
+        # 卡片4：就医方案（院内导引） - 切分成小块防止被截断推到下一页
         nav_steps = task_params.get('nav_steps', [])
-        elements.append(NavStepsCardFlowable(nav_steps, font_name, fs))
-        elements.append(Spacer(1, CARD_SPACING))
+        if not nav_steps:
+            elements.append(NavStepsCardFlowable([], font_name, fs))
+            elements.append(Spacer(1, CARD_SPACING))
+        else:
+            step_chunks = [nav_steps[i:i + 6] for i in range(0, len(nav_steps), 6)]
+            for i, chunk in enumerate(step_chunks):
+                title = "📋  就医方案" if i == 0 else "📋  就医方案 (接上)"
+                elements.append(NavStepsCardFlowable(chunk, font_name, fs, title))
+                elements.append(Spacer(1, CARD_SPACING))
 
         # 卡片5：出行清单（定制化）
         elements.append(ChecklistCardFlowable(task_params, font_name, fs))

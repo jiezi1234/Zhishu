@@ -95,6 +95,126 @@
       "queue_estimate_min": 32,
       "source_url": "https://www.bjmu.edu.cn/",
       "crawl_timestamp": "2026-04-08T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_001",
+      "hospital_name": "北京协和医院",
+      "department": "神经内科",
+      "doctor_name": "赵医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-18 09:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 35,
+      "source_url": "https://www.pkuph.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_003",
+      "hospital_name": "北京医院",
+      "department": "神经内科",
+      "doctor_name": "钱医生",
+      "doctor_title": "副主任医师",
+      "available_time": "2026-04-19 14:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 28,
+      "source_url": "https://www.bjyy.com.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_001",
+      "hospital_name": "北京协和医院",
+      "department": "心内科",
+      "doctor_name": "孙医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-18 10:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 40,
+      "source_url": "https://www.pkuph.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_002",
+      "hospital_name": "北京大学第一医院",
+      "department": "心内科",
+      "doctor_name": "李医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-19 09:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 38,
+      "source_url": "https://www.bjmu.edu.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_002",
+      "hospital_name": "北京大学第一医院",
+      "department": "消化内科",
+      "doctor_name": "周医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-18 14:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 30,
+      "source_url": "https://www.bjmu.edu.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_003",
+      "hospital_name": "北京医院",
+      "department": "消化内科",
+      "doctor_name": "吴医生",
+      "doctor_title": "副主任医师",
+      "available_time": "2026-04-20 10:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 25,
+      "source_url": "https://www.bjyy.com.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_001",
+      "hospital_name": "北京协和医院",
+      "department": "感染科",
+      "doctor_name": "郑医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-18 11:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 22,
+      "source_url": "https://www.pkuph.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_004",
+      "hospital_name": "北京清华长庚医院",
+      "department": "感染科",
+      "doctor_name": "王医生",
+      "doctor_title": "副主任医师",
+      "available_time": "2026-04-19 15:00",
+      "registration_fee": 80,
+      "queue_estimate_min": 18,
+      "source_url": "https://www.tsinghuahospital.com/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_003",
+      "hospital_name": "北京医院",
+      "department": "皮肤科",
+      "doctor_name": "冯医生",
+      "doctor_title": "主任医师",
+      "available_time": "2026-04-20 09:00",
+      "registration_fee": 100,
+      "queue_estimate_min": 20,
+      "source_url": "https://www.bjyy.com.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
+    },
+    {
+      "hospital_id": "hospital_005",
+      "hospital_name": "北京中医医院",
+      "department": "皮肤科",
+      "doctor_name": "陈医生",
+      "doctor_title": "副主任医师",
+      "available_time": "2026-04-21 14:00",
+      "registration_fee": 60,
+      "queue_estimate_min": 15,
+      "source_url": "https://www.bjzhyy.com.cn/",
+      "crawl_timestamp": "2026-04-17T10:30:00"
     }
   ]
 }

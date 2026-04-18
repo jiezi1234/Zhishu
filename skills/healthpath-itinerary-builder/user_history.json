@@ -1,0 +1,112 @@
+{
+  "北京大学第六医院": {
+    "hospital_name": "北京大学第六医院",
+    "address": "海淀区花园北路51号",
+    "department": "精神科 / 睡眠门诊",
+    "official_url": "",
+    "registration_url": "https://www.jingytong.com/hospital/pkuh6",
+    "platform": "京医通",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%88%E8%8C%83%E5%A4%A7%E5%AD%A6%E6%B5%B7%E6%B7%80%E5%B0%8F%E5%8C%BA&destination=%E6%B5%B7%E6%B7%80%E5%8C%BA%E8%8A%B1%E5%9B%AD%E5%8C%97%E8%B7%AF51%E5%8F%B7&mode=transit",
+    "last_visit": "2026-04-15T20:40:07.239597"
+  },
+  "中日友好医院": {
+    "hospital_name": "中日友好医院",
+    "address": "北京市朝阳区望京中环南路6号",
+    "department": "消化内科",
+    "official_url": "",
+    "registration_url": "",
+    "platform": "",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E9%82%AE%E7%94%B5%E5%A4%A7%E5%AD%A6&destination=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E6%9C%9B%E4%BA%AC%E4%B8%AD%E7%8E%AF%E5%8D%97%E8%B7%AF6%E5%8F%B7&mode=transit",
+    "last_visit": "2026-04-15T19:09:55.884311"
+  },
+  "北京协和医院": {
+    "hospital_name": "北京协和医院",
+    "address": "",
+    "department": "骨科",
+    "official_url": "http://www.pumch.ac.cn",
+    "registration_url": "http://www.pumch.ac.cn",
+    "platform": "医院官网",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E6%9C%9B%E4%BA%AC%E8%A1%97%E9%81%93&destination=%E5%8C%97%E4%BA%AC%E5%8D%8F%E5%92%8C%E5%8C%BB%E9%99%A2%28%E8%A5%BF%E5%8D%95%E9%99%A2%E5%8C%BA%29%28%E5%8C%97%E4%BA%AC%E5%B8%82%E8%A5%BF%E5%9F%8E%E5%8C%BA%E5%A4%A7%E6%9C%A8%E4%BB%93%E8%83%A1%E5%90%8C41%E5%8F%B7%29&mode=transit",
+    "last_visit": "2026-04-18T14:34:27.395673"
+  },
+  "北京市昌平区沙河医院": {
+    "hospital_name": "北京市昌平区沙河医院",
+    "address": "北京市昌平区沙河镇松兰堡路22号",
+    "department": "神经内科",
+    "official_url": "http://www.bjcpshyy.com",
+    "registration_url": "请到院现场挂号或拨打 (010)69731335 咨询",
+    "platform": "医院现场挂号",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E9%82%AE%E7%94%B5%E5%A4%A7%E5%AD%A6%E6%B2%99%E6%B2%B3%E6%A0%A1%E5%8C%BA&destination=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%98%8C%E5%B9%B3%E5%8C%BA%E6%B2%99%E6%B2%B3%E9%95%87%E6%9D%BE%E5%85%B0%E5%A0%A1%E8%B7%AF22%E5%8F%B7&mode=transit",
+    "last_visit": "2026-04-15T20:27:15.966846"
+  },
+  "北京大学第三医院": {
+    "hospital_name": "北京大学第三医院",
+    "address": "北京市海淀区花园北路49号",
+    "department": "骨科",
+    "official_url": "https://www.puh3.net.cn/",
+    "registration_url": "",
+    "platform": "",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E9%82%AE%E7%94%B5%E5%A4%A7%E5%AD%A6&destination=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%B5%B7%E6%B7%80%E5%8C%BA%E8%8A%B1%E5%9B%AD%E5%8C%97%E8%B7%AF49%E5%8F%B7&mode=transit",
+    "last_visit": "2026-04-16T16:02:40.164394"
+  },
+  "广州中医药大学第一附属医院": {
+    "hospital_name": "广州中医药大学第一附属医院",
+    "address": "",
+    "department": "骨科",
+    "official_url": "",
+    "registration_url": "https://www.guahao.cn/hospital/4401020026/department",
+    "platform": "健康广东",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%B9%BF%E5%B7%9E%E5%B8%82%E5%A4%A9%E6%B2%B3%E5%8C%BA%E4%BD%93%E8%82%B2%E8%A5%BF%E8%B7%AF&destination=%E5%B9%BF%E5%B7%9E%E4%B8%AD%E5%8C%BB%E8%8D%AF%E5%A4%A7%E5%AD%A6%E7%AC%AC%E4%B8%80%E9%99%84%E5%B1%9E%E5%8C%BB%E9%99%A2&mode=transit",
+    "last_visit": "2026-04-16T16:53:33.940762"
+  },
+  "中山大学附属第三医院": {
+    "hospital_name": "中山大学附属第三医院",
+    "address": "广州市天河区天河路600号",
+    "department": "骨科",
+    "official_url": "",
+    "registration_url": "https://www.guahao.cn/",
+    "platform": "健康广东",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%B9%BF%E5%B7%9E%E5%B8%82%E5%A4%A9%E6%B2%B3%E5%8C%BA&destination=%E4%B8%AD%E5%B1%B1%E5%A4%A7%E5%AD%A6%E9%99%84%E5%B1%9E%E7%AC%AC%E4%B8%89%E5%8C%BB%E9%99%A2&mode=transit",
+    "last_visit": "2026-04-16T17:41:47.389361"
+  },
+  "锦华医院": {
+    "hospital_name": "锦华医院",
+    "address": "城关区南河路1528号",
+    "department": "消化内科",
+    "official_url": "",
+    "registration_url": "https://www.haodf.com/",
+    "platform": "好大夫在线",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%85%B0%E5%B7%9E%E5%B8%82%E5%A4%96%E5%9B%BD%E8%AF%AD%E9%AB%98%E7%BA%A7%E4%B8%AD%E5%AD%A6&destination=%E9%94%A6%E5%8D%8E%E5%8C%BB%E9%99%A2&mode=transit",
+    "last_visit": "2026-04-16T18:27:18.649471"
+  },
+  "兰州大学第二医院": {
+    "hospital_name": "兰州大学第二医院",
+    "address": "甘肃省兰州市城关区萃英门82号",
+    "department": "骨科",
+    "official_url": "",
+    "registration_url": "https://www.haodf.com/",
+    "platform": "好大夫在线",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%85%B0%E5%B7%9E%E5%A4%A7%E5%AD%A6%28%E5%9F%8E%E5%85%B3%E6%A0%A1%E5%8C%BA%29&destination=%E5%85%B0%E5%B7%9E%E5%A4%A7%E5%AD%A6%28%E5%9F%8E%E5%85%B3%E6%A0%A1%E5%8C%BA%29&mode=transit",
+    "last_visit": "2026-04-16T18:50:46.238956"
+  },
+  "北京回龙观医院": {
+    "hospital_name": "北京回龙观医院",
+    "address": "北京市昌平区回龙观街道南店北路",
+    "department": "心理科",
+    "official_url": "http://www.bhlgh.com/",
+    "registration_url": "https://www.bjguahao.gov.cn/",
+    "platform": "京医通",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E9%82%AE%E7%94%B5%E5%A4%A7%E5%AD%A6%E6%B2%99%E6%B2%B3%E6%A0%A1%E5%8C%BA&destination=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%98%8C%E5%B9%B3%E5%8C%BA%E5%9B%9E%E9%BE%99%E8%A7%82%E8%A1%97%E9%81%93%E5%8D%97%E5%BA%97%E5%8C%97%E8%B7%AF&mode=transit",
+    "last_visit": "2026-04-16T19:16:50.172774"
+  },
+  "某个不存在的医院": {
+    "hospital_name": "某个不存在的医院",
+    "address": "",
+    "department": "骨科",
+    "official_url": "",
+    "registration_url": "",
+    "platform": "",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E6%9C%9B%E4%BA%AC%E8%A1%97%E9%81%93&destination=%E4%B8%AD%E5%B1%B1%E5%B8%82%E4%B8%AD%E5%8C%BB%E9%99%A2%28%E5%B9%BF%E4%B8%9C%E7%9C%81%E4%B8%AD%E5%B1%B1%E5%B8%82%E5%BA%B7%E6%AC%A3%E8%B7%AF3%E5%8F%B7%29&mode=transit",
+    "last_visit": "2026-04-17T19:50:47.220221"
+  }
+}

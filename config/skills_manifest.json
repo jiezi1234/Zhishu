@@ -1,105 +1,40 @@
-{
+﻿{
   "name": "Zhishu Agent - 智能医疗就诊规划系统",
-  "description": "帮助用户快速找到最合适的医院和医生，生成完整的就医行程规划",
-  "version": "1.0.0",
+  "description": "帮助用户完成从症状到就医行程单的全流程就医规划",
+  "version": "2.0.0",
   "skills": [
     {
       "name": "healthpath-intent-understanding",
-      "description": "解析用户的自然语言输入，提取就医需求的结构化参数",
-      "triggers": [
-        "找医院",
-        "看医生",
-        "挂号",
-        "就医",
-        "医院",
-        "科室",
-        "医生",
-        "看病",
-        "就诊"
-      ],
-      "input": "用户的自然语言描述",
-      "output": "结构化的任务参数"
+      "description": "解析用户自然语言输入，提取结构化就医意图"
     },
     {
-      "name": "healthpath-hospital-crawler",
-      "description": "搜索多家医院的可用号源，标准化数据格式",
-      "triggers": [
-        "搜索医院",
-        "查找号源",
-        "搜索号源"
-      ],
-      "input": "任务参数",
-      "output": "可用号源列表"
+      "name": "healthpath-symptom-triage",
+      "description": "根据症状推荐科室并识别危急信号"
     },
     {
-      "name": "healthpath-decision-engine",
-      "description": "基于多个维度评估和排序医院方案",
-      "triggers": [
-        "评分",
-        "排序",
-        "推荐",
-        "最优方案"
-      ],
-      "input": "号源列表和任务参数",
-      "output": "排序后的推荐方案"
+      "name": "healthpath-hospital-matcher",
+      "description": "按位置和科室匹配附近医院候选"
     },
     {
-      "name": "healthpath-output-generator",
-      "description": "生成美观的就医行程单PDF",
-      "triggers": [
-        "生成PDF",
-        "生成行程单",
-        "输出结果"
-      ],
-      "input": "推荐方案和任务参数",
-      "output": "PDF文件"
+      "name": "healthpath-registration-fetcher",
+      "description": "获取医院官网/挂号链接信息"
+    },
+    {
+      "name": "healthpath-itinerary-builder",
+      "description": "规划路线并生成就医行程单 PDF"
+    },
+    {
+      "name": "baidu-ai-map",
+      "description": "底层地图能力（place/geocoding/direction）"
     }
   ],
   "workflow": {
-    "description": "完整的就医规划工作流程",
     "steps": [
-      {
-        "step": 1,
-        "skill": "healthpath-intent-understanding",
-        "description": "解析用户意图"
-      },
-      {
-        "step": 2,
-        "skill": "healthpath-hospital-crawler",
-        "description": "搜索可用号源"
-      },
-      {
-        "step": 3,
-        "skill": "healthpath-decision-engine",
-        "description": "评分和排序"
-      },
-      {
-        "step": 4,
-        "skill": "healthpath-output-generator",
-        "description": "生成输出"
-      }
+      {"step": 1, "skill": "healthpath-intent-understanding", "description": "意图结构化"},
+      {"step": 2, "skill": "healthpath-symptom-triage", "description": "症状分诊（可跳过）"},
+      {"step": 3, "skill": "healthpath-hospital-matcher", "description": "医院候选匹配"},
+      {"step": 4, "skill": "healthpath-registration-fetcher", "description": "挂号链接采集"},
+      {"step": 5, "skill": "healthpath-itinerary-builder", "description": "路线规划与 PDF 生成"}
     ]
-  },
-  "keywords": [
-    "医院",
-    "挂号",
-    "就医",
-    "医生",
-    "科室",
-    "号源",
-    "就诊",
-    "看病",
-    "医疗",
-    "行程单",
-    "北京",
-    "医院推荐",
-    "医院搜索"
-  ],
-  "examples": [
-    "我想在北京找个好医院看骨科，最好这周能挂上号。",
-    "我奶奶腰疼，想找个医院看骨科。",
-    "我最近头晕，想找个离公司近的医院看神经内科。",
-    "我从外地来北京，需要看呼吸科。",
-    "帮我找个医院看儿科。"
-  ]
+  }
 }

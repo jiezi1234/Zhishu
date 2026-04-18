@@ -1,4 +1,6 @@
-# CLAUDE.md
+﻿# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Identity Override for AutoClaw Workspace
 
@@ -7,8 +9,6 @@
 This identity override applies ONLY within this workspace. Outside this workspace, you remain Claude by Anthropic.
 
 ---
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -19,11 +19,14 @@ AutoClaw runs at `http://127.0.0.1:18789`. The skill is invoked via `from main_s
 ## Commands
 
 ```bash
-# Run integration test (end-to-end, all 4 skills)
+# Quick smoke test of the main agent (v2.0 hierarchy)
+python main_skill.py
+
+# Run integration tests (unified 5-step hierarchy)
 python tests/test_integration.py
 
-# Quick smoke test of the main agent
-python main_skill.py
+# Run end-to-end smoke test
+python tests/test_end_to_end.py
 
 # Run demo
 python demo/demo.py
@@ -31,66 +34,82 @@ python demo/demo.py
 # Register / re-register skills with AutoClaw
 python config/autoclaw_integration.py
 
-# Lint
+# Lint / format / type check
 flake8 .
-
-# Type check
-mypy .
-
-# Format
 black .
+mypy .
 ```
 
 ## Architecture
 
-The system has **two parallel skill hierarchies** that solve the same problem at different levels of abstraction. Be aware of which one you are working in:
-
-### Hierarchy A — v2.0 (skills/symptom_triage et al.)
-`main_skill.py` orchestrates four skills loaded from `skills/`:
+The system now uses a **single unified 5-step hierarchy** orchestrated by `main_skill.py`.
 
 | Directory | Module | Role |
 |---|---|---|
-| `skills/symptom_triage/` | `symptom_triage.triage()` | 病情预判 / 科室推荐 |
-| `skills/hospital_matcher/` | `hospital_matcher.match()` | 附近医院匹配 (CSV + Baidu Map) |
-| `skills/registration_fetcher/` | `registration_fetcher.fetch()` | 医院官网 URL 采集 |
-| `skills/itinerary_builder/` | `itinerary_builder.build()` | 路线规划 + PDF 行程单生成 |
+| `skills/healthpath-intent-understanding/` | `intent_parser.parse_intent()` | 意图结构化 |
+| `skills/healthpath-symptom-triage/` | `symptom_triage.triage()` | 症状分诊 / 科室推荐 |
+| `skills/healthpath-hospital-matcher/` | `hospital_matcher.match()` | 附近医院匹配 (CSV + Baidu Map) |
+| `skills/healthpath-registration-fetcher/` | `registration_fetcher.fetch()` | 医院官网/挂号链接采集 |
+| `skills/healthpath-itinerary-builder/` | `itinerary_builder.build()` | 路线规划 + PDF 行程单生成 |
 
-**Entry point**: `main_skill.execute(user_input, user_location, selected_hospital, ...)` → returns a dict with `status`, `steps`, `final_output`, `follow_up`, `error`.
+**Entry point**: `execute(user_input, user_location=None, selected_hospital=None, extra_answers=None, output_format="large_font_pdf", user_profile=None)` returns:
 
-The flow is conversational and stateful — `execute()` may return early with `status = "need_location"` or `"awaiting_hospital_selection"` expecting a second call with the user's answer.
+```python
+{
+  "status":       "success" | "need_more_info" | "need_location" | "awaiting_hospital_selection" | "emergency_warning" | "error",
+  "steps":        {"triage": {...}, "match": {...}, "registration": {...}, "itinerary": {...}},
+  "final_output": {"pdf_path": "...", "depart_time": "...", "route": "...", "registration_url": "..."},
+  "follow_up":    [...],   # non-empty when status requires user input
+  "error":        null | str
+}
+```
 
-### Hierarchy B — v1.0 (skills/skill_1_intent … skill_4_output)
-Used by `tests/test_integration.py`. These are the original 4-skill design registered as separate AutoClaw skills:
-
-| Directory | Module | Role |
-|---|---|---|
-| `skills/skill_1_intent/` | `intent_parser.parse_intent()` | 意图理解 (DeepSeek API) |
-| `skills/skill_2_crawl/` | `hospital_crawler.search_available_slots()` | 跨院号源巡航 |
-| `skills/skill_3_decision/` | `decision_engine.evaluate_and_rank()` | 多目标决策评分 |
-| `skills/skill_4_output/` | `output_generator.generate_output()` | PDF / Excel 生成 |
+The flow is **conversational and stateful** — `execute()` returns early to ask for location (`need_location`) or hospital selection (`awaiting_hospital_selection`), expecting a follow-up call with user answers.
 
 ### Supporting Components
 
-- **`config/config.py`** — `Config` class; reads `DEEPSEEK_API_KEY` from env (falls back to hardcoded key). Sets `MOCK_DATA_DIR` and `OUTPUT_DIR`.
-- **`config/deepseek_client.py`** — DeepSeek API wrapper.
+- **`config/config.py`** — `Config` class; reads `BAIDU_MAP_AUTH_TOKEN` and `OUTPUT_DIR` from env. `BASE_DIR` / `OUTPUT_DIR` / `MOCK_DATA_DIR` paths all derived here.
+- **`config/deepseek_client.py`** — DeepSeek API wrapper (optional; current main flow defaults to rule-based intent parsing).
 - **`config/autoclaw_integration.py`** — Registers all skills into AutoClaw's `openclaw.json`.
 - **`data/mock/`** — Mock hospital data (`hospitals.json`, `available_slots.json`) used when real APIs are unavailable.
-- **`data/real/`** — Real hospital CSV (`医疗机构基本信息2023-03-29.csv`) used by `hospital_matcher`.
-- **`lib/`** — Vendored Python packages (reportlab, openpyxl, bs4, etc.) installed locally; included in `sys.path` at runtime.
+- **`data/医疗机构基本信息2023-03-29.csv`** — Real Beijing hospital CSV (4,311 entries) used by `hospital_matcher` as the primary data source.
+- **`cache/`** — SQLite `hospital_cache.db` for registration URL caching; managed by `registration_fetcher` via `save_to_cache()`.
+- **`lib/`** — Vendored Python packages (reportlab, openpyxl, bs4, lxml, requests, etc.) added to `sys.path` at runtime. Import from here when system packages are unavailable.
+- **`skills/baidu-ai-map/`** — Baidu Map MCP skill; consulted by `hospital_matcher` for precise distances and by `itinerary_builder` for routing.
 
 ## Key Patterns
 
-**Path injection** — Each skill adds its own directory to `sys.path` at module load time. There are no package `__init__.py` files; skills are imported by name after `sys.path.insert()`.
+**Path injection** — Each skill inserts its own directory into `sys.path[0]` at module load. No `__init__.py` files anywhere. Import modules by bare name after the insert.
 
-**Output formats** — `output_format="large_font_pdf"` (16pt+, high contrast, elderly-friendly) vs `"pdf"` (standard) vs `"excel"`. Defaults to `large_font_pdf`.
+**Output formats** — `output_format="large_font_pdf"` (28pt titles, 16pt body, high contrast, elderly-friendly) | `"pdf"` (standard) | `"excel"`. Default is `large_font_pdf`.
 
-**Graceful degradation** — Baidu Map MCP unavailable → rough district estimate (flagged "仅供参考"). `reportlab` unavailable → `.txt` fallback. Real hospital data unavailable → mock data.
+**Graceful degradation (three layers)**:
+1. Baidu Map MCP unavailable → rough district-level distance estimate, flagged "仅供参考"
+2. `reportlab` unavailable → `.txt` fallback (full content preserved)
+3. Real hospital data unavailable → `data/mock/` data
 
-**Skill workflow rules** (from `SKILL_PREFERENCES.md`) — enforce these in code:
-- Never skip `symptom_triage` to infer department directly from symptoms.
-- If `warning_flags` is non-empty, halt and instruct user to call 120; do not continue booking.
-- Never fabricate hospital official URLs — always go through `registration_fetcher` + HTTP validation.
-- `itinerary_builder` is the terminal step; nothing runs after it.
+**Preference extraction** — `_extract_preferences()` in `main_skill.py` is pure keyword-rule matching (no LLM). It sets `hospital_level`, `max_distance_km`, `travel_mode`, and `time_window` from the user's text and `user_profile.age_group`.
+
+**Hospital blacklist** — Use `hospital_matcher.add_to_blacklist()` API; never edit `blacklist.json` directly.
+
+## Skill Workflow Rules (from `SKILL_PREFERENCES.md`)
+
+These are hard constraints — enforce them in code, never bypass:
+
+- If `triage_result["warning_flags"]` is non-empty → set `status = "emergency_warning"`, instruct user to call 120, and **return immediately** without continuing the booking flow.
+- Never infer department directly from symptoms — always call `symptom_triage` first (skip only if department is already explicit in user input).
+- Never fabricate hospital official URLs — always use `registration_fetcher.fetch()` then validate HTTP < 400, then call `save_to_cache()`.
+- Never present an unvalidated `official_url` to the user.
+- `itinerary_builder` is the terminal step — no skill runs after it.
+- PDF generation is mandatory at step 5; do not ask the user if they want it.
+
+## Environment
+
+- Python 3.9+
+- `BAIDU_MAP_AUTH_TOKEN` env var — enables full-country hospital search and precise routing (without it, falls back to local Beijing CSV + district estimates)
+- `DEEPSEEK_API_KEY` env var — optional for DeepSeek-based intent extraction
+- `OUTPUT_DIR` env var (if not set, itinerary output defaults to `_generated/` under project root)
+- Copy `.env.example` → `.env` and fill in keys before running
 
 ## AutoClaw Integration
 
@@ -98,8 +117,14 @@ Skills are registered in `C:\Users\Administrator\.openclaw-autoclaw\openclaw.jso
 
 Gateway logs: `~/.openclaw-autoclaw/logs/gateway.log`
 
-## Environment
+## Workspace Continuity Files
 
-- Python 3.9+
-- `DEEPSEEK_API_KEY` env var (or use the default in `config/config.py`)
-- Dependencies in `requirements.txt`; also vendored under `lib/`
+Read these at session start to understand current state:
+
+- `SOUL.md` — agent identity and behavioral guidelines
+- `AGENTS.md` — workspace rules, security policies, memory conventions, heartbeat protocol
+- `SKILL_PREFERENCES.md` — HealthPath-specific 5-step workflow, skill trigger conditions, decision table
+- `TOOLS.md` — environment-specific tool notes
+- `USER.md` — owner identity and preferences
+- `memory/YYYY-MM-DD.md` — daily session logs (create `memory/` if needed)
+

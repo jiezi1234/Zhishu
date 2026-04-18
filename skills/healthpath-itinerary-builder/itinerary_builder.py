@@ -32,6 +32,7 @@ itinerary_builder.py — 路线规划与就医行程单生成
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -39,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 _ROOT          = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _SKILL_DIR     = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR     = os.path.join(_ROOT, "output")                       # PDF 输出（项目级共享目录）
-HISTORY_PATH   = os.path.join(_SKILL_DIR, "user_history.json")       # 就医历史记录（本 skill 私有）
+OUTPUT_DIR     = os.path.join(_ROOT, "output")                           # PDF 输出目录
+HISTORY_PATH   = os.path.join(_SKILL_DIR, "user_history.json")          # 就医历史记录（本 skill 私有）
 
 # ── 携带物品清单模板 ──────────────────────────────────────────────────────
 BASE_CHECKLIST = [
@@ -298,15 +299,21 @@ def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> di
                         
                         instructions = []
                         raw_steps = best_route.get("steps", [])
+                        normalized_steps = []
                         for leg in raw_steps:
                             if isinstance(leg, list):
-                                if not leg: continue
+                                if not leg:
+                                    continue
                                 step = leg[0]
                             else:
                                 step = leg
-                            
-                            if not isinstance(step, dict): continue
-                            
+
+                            if isinstance(step, dict):
+                                normalized_steps.append(step)
+
+                        for idx, step in enumerate(normalized_steps):
+                            next_step = normalized_steps[idx + 1] if idx + 1 < len(normalized_steps) else None
+
                             inst = step.get("instructions", "").strip()
                             v_info = step.get("vehicle_info", {})
                             detail = v_info.get("detail") if isinstance(v_info, dict) else None
@@ -326,7 +333,15 @@ def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> di
                                     inst = f"沿 {road} 前行 {dist}米" if dist else f"进入 {road}"
                                 elif dist:
                                     inst = f"前行 {dist}米"
-                                    
+
+                            inst = _augment_route_instruction(
+                                inst=inst,
+                                step=step,
+                                next_step=next_step,
+                                is_last=(idx == len(normalized_steps) - 1),
+                                final_destination=dest,
+                            )
+
                             if inst:
                                 instructions.append(inst)
                         
@@ -342,9 +357,12 @@ def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> di
                             
                         if not ans_detail:
                             ans_detail = f"建议行程 {total_dist:.1f} 公里，预计 {total_dur} 分钟。"
-                            
+
+                        # 智能识别交通方式
+                        travel_mode = _detect_travel_mode(ans_detail, best_route)
+
                         return {
-                            "mode":         "建议路线",
+                            "mode":         travel_mode,
                             "distance_km":  f"{total_dist:.1f}",
                             "duration_min": total_dur,
                             "description":  ans_detail,
@@ -366,6 +384,141 @@ def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> di
         logging.getLogger(__name__).error(f"Baidu Map API error: {e}")
         
     return fallback
+
+
+def _detect_travel_mode(description: str, route_data: dict) -> str:
+    """
+    从路线描述和路线数据中智能识别交通方式。
+
+    优先级：地铁 > 公交 > 打车/驾车 > 步行
+    """
+    import re
+
+    desc_lower = description.lower()
+
+    # 检查是否包含地铁
+    if "地铁" in description or "号线" in description:
+        # 提取地铁线路
+        lines = re.findall(r'(\d+号线|[一二三四五六七八九十]+号线)', description)
+        if lines:
+            return f"地铁（{lines[0]}等）"
+        return "地铁"
+
+    # 检查是否包含公交
+    if "公交" in description or "路公交" in description or re.search(r'\d+路', description):
+        return "公交"
+
+    # 检查是否为打车/驾车
+    if any(kw in description for kw in ["打车", "驾车", "开车", "自驾"]):
+        return "打车/驾车"
+
+    # 检查步行距离
+    if "步行" in description:
+        # 如果主要是步行（距离较短）
+        steps = route_data.get("steps", []) if isinstance(route_data, dict) else []
+        if steps:
+            # 检查是否大部分是步行
+            walk_count = sum(1 for s in steps if isinstance(s, dict) and "步行" in s.get("instructions", ""))
+            if walk_count > len(steps) * 0.7:  # 70%以上是步行
+                return "步行"
+
+    # 默认返回公共交通
+    return "公共交通"
+
+
+def _augment_route_instruction(inst: str, step: dict, next_step: Optional[dict],
+                               is_last: bool, final_destination: str) -> str:
+    """给步行/骑行等非公交步骤补充目的地，提升可读性。"""
+    if not inst:
+        return inst
+
+    # 公交地铁步骤一般已包含上下车信息，不做改写
+    if "乘坐" in inst or "站" in inst and "经过" in inst:
+        return inst
+
+    # 已包含“到”则不重复拼接
+    if "到" in inst:
+        return inst
+
+    # 仅增强非公交移动步骤
+    movable = ("步行", "骑行", "前行", "沿 ")
+    if not any(inst.startswith(prefix) for prefix in movable):
+        return inst
+
+    target = _guess_step_target(step, next_step, is_last, final_destination)
+    if not target:
+        target = "下一换乘点" if not is_last else "目的地"
+
+    # 统一把“前行/沿路前行”改成“步行xx到xxx”
+    if inst.startswith("前行") or inst.startswith("沿 "):
+        dist_text = _extract_distance_text(step, inst)
+        return f"步行{dist_text}到{target}" if dist_text else f"步行到{target}"
+
+    # 步行/骑行补尾部目的地
+    return f"{inst}到{target}"
+
+
+def _extract_distance_text(step: dict, inst: str) -> str:
+    m = re.search(r"(\d+(?:\.\d+)?)(公里|米)", inst)
+    if m:
+        return m.group(0)
+    dist = step.get("distance")
+    if isinstance(dist, (int, float)) and dist > 0:
+        if dist >= 1000:
+            return f"{dist / 1000:.1f}公里"
+        return f"{int(dist)}米"
+    return ""
+
+
+def _guess_step_target(step: dict, next_step: Optional[dict], is_last: bool, final_destination: str) -> str:
+    # 先看当前 step 是否有明确终点字段
+    for k in ("end_name", "end_poi_name", "destination", "arrive_name", "to_name"):
+        v = step.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+
+    # 再尝试直接从当前文案里提取终点名
+    target_from_inst = _extract_target_from_instruction(step.get("instructions", ""))
+    if target_from_inst:
+        return target_from_inst
+
+    # 再尝试从下一段公交信息中推断“前往上车站”
+    if next_step and isinstance(next_step, dict):
+        v_info = next_step.get("vehicle_info", {})
+        detail = v_info.get("detail", {}) if isinstance(v_info, dict) else {}
+        on_station = detail.get("on_station") if isinstance(detail, dict) else ""
+        if isinstance(on_station, str) and on_station.strip():
+            return on_station.strip()
+
+        # 非公交下一段也继续向前追一个明确地点，避免出现“下一换乘点”
+        next_target = _guess_step_target(
+            step=next_step,
+            next_step=None,
+            is_last=is_last,
+            final_destination=final_destination,
+        )
+        if next_target:
+            return next_target
+
+    # 最后一段默认到目的地
+    if is_last and final_destination:
+        return final_destination
+    return final_destination or ""
+
+
+def _extract_target_from_instruction(inst: str) -> str:
+    if not inst:
+        return ""
+
+    patterns = [
+        r"到([^->，。]+?站)",
+        r"到([^->，。]+?(?:医院|门诊部|大厦|广场|园区|校区|中心|目的地))",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, inst)
+        if m:
+            return m.group(1).strip()
+    return ""
 
 
 def _map_url(origin: str, dest: str) -> str:
@@ -431,14 +584,8 @@ def _generate_pdf(hospital_name, hospital_address, department,
                   depart_time, checklist, nav_steps,
                   age_group, output_format, timestamp) -> str:
     """
-    生成 PDF 行程单，调用 skill_4_output/pdf_generator.py 新版卡片风生成器。
+    生成 PDF 行程单，调用当前目录下的 pdf_generator.py。
     """
-    import sys
-    skill4_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                              "skill_4_output")
-    if skill4_dir not in sys.path:
-        sys.path.insert(0, skill4_dir)
-
     from pdf_generator import generate_pdf_document
 
     filename = f"itinerary_{timestamp}.pdf"
@@ -492,30 +639,33 @@ def _generate_pdf(hospital_name, hospital_address, department,
 def _save_history(hospital_name, hospital_address, department,
                   registration_info, route) -> None:
     """将本次就医信息写入 skills/itinerary_builder/user_history.json"""
-    os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
-    history = {}
-    if os.path.exists(HISTORY_PATH):
-        try:
-            with open(HISTORY_PATH, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        except Exception:
-            pass
+    try:
+        os.makedirs(os.path.dirname(HISTORY_PATH), exist_ok=True)
+        history = {}
+        if os.path.exists(HISTORY_PATH):
+            try:
+                with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                pass
 
-    reg = registration_info or {}
-    history[hospital_name] = {
-        "hospital_name":    hospital_name,
-        "address":          hospital_address,
-        "department":       department,
-        "official_url":     reg.get("official_url", ""),
-        "registration_url": reg.get("registration_url", ""),
-        "platform":         reg.get("registration_platform", ""),
-        "route_map_url":    route.get("map_url", ""),
-        "last_visit":       datetime.now().isoformat(),
-    }
+        reg = registration_info or {}
+        history[hospital_name] = {
+            "hospital_name":    hospital_name,
+            "address":          hospital_address,
+            "department":       department,
+            "official_url":     reg.get("official_url", ""),
+            "registration_url": reg.get("registration_url", ""),
+            "platform":         reg.get("registration_platform", ""),
+            "route_map_url":    route.get("map_url", ""),
+            "last_visit":       datetime.now().isoformat(),
+        }
 
-    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
-    logger.info(f"[itinerary_builder] 已写入历史: {hospital_name}")
+        with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        logger.info(f"[itinerary_builder] 已写入历史: {hospital_name}")
+    except Exception as e:
+        logger.warning("[itinerary_builder] 写入历史失败，已忽略: %s", e)
 
 
 # ── 便捷入口 ──────────────────────────────────────────────────────────────

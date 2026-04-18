@@ -1,0 +1,88 @@
+{
+  "北京大学第六医院": {
+    "official_url": "http://www.pkuh6.cn/",
+    "timestamp": "2026-04-14T20:57:44.029644"
+  },
+  "中日友好医院": {
+    "official_url": "https://www.zryhyy.com.cn",
+    "timestamp": "2026-04-15T19:43:06.458914"
+  },
+  "北京市昌平区沙河医院": {
+    "official_url": "http://www.bjcpshyy.com",
+    "timestamp": "2026-04-15T20:05:31.715173"
+  },
+  "北京大学第三医院": {
+    "official_url": "https://www.puh3.net.cn/",
+    "timestamp": "2026-04-16T16:01:15.865030"
+  },
+  "成都市第三人民医院": {
+    "official_url": "",
+    "registration_url": "https://his.sc120.com/",
+    "registration_platform": "四川省预约挂号",
+    "booking_note": "支持微信小程序",
+    "updated_at": "2026-04-16T16:53:16.143860"
+  },
+  "暨南大学附属第一医院": {
+    "official_url": "http://www.jd120.com",
+    "registration_url": "https://www.haodf.com/",
+    "registration_platform": "好大夫在线",
+    "booking_note": "可直接搜索医院或医生姓名预约",
+    "updated_at": "2026-04-16T16:53:17.491277"
+  },
+  "中山大学附属第三医院": {
+    "official_url": "",
+    "registration_url": "https://www.guahao.cn/",
+    "registration_platform": "健康广东",
+    "booking_note": "搜索医院名 + 点击预约即可",
+    "updated_at": "2026-04-16T17:13:03.174588"
+  },
+  "锦华医院": {
+    "official_url": "",
+    "registration_url": "https://www.haodf.com/",
+    "registration_platform": "好大夫在线",
+    "booking_note": "可直接搜索医院或医生姓名预约",
+    "updated_at": "2026-04-16T17:46:28.993480"
+  },
+  "兰州大学第二医院": {
+    "official_url": "",
+    "registration_url": "https://www.haodf.com/",
+    "registration_platform": "好大夫在线",
+    "booking_note": "可直接搜索医院或医生姓名预约",
+    "updated_at": "2026-04-16T18:45:41.634410"
+  },
+  "北京回龙观医院": {
+    "official_url": "",
+    "registration_url": "https://www.bjguahao.gov.cn/",
+    "registration_platform": "",
+    "booking_note": "支持微信搜索「京医通」小程序预约",
+    "updated_at": "2026-04-16T19:12:35.033567"
+  },
+  "上海交通大学医学院附属瑞金医院": {
+    "official_url": "https://www.rjh.com.cn/",
+    "registration_url": "https://www.rjh.com.cn/",
+    "registration_platform": "医院官网",
+    "booking_note": "请以医院官网最新放号信息为准。",
+    "updated_at": "2026-04-17T12:00:00"
+  },
+  "上海市第一人民医院": {
+    "official_url": "https://www.firsthospital.cn/",
+    "registration_url": "https://www.firsthospital.cn/",
+    "registration_platform": "医院官网",
+    "booking_note": "请以医院官网最新放号信息为准。",
+    "updated_at": "2026-04-17T12:00:00"
+  },
+  "中山大学附属第一医院": {
+    "official_url": "https://www.gzsums.edu.cn/",
+    "registration_url": "https://www.gzsums.edu.cn/",
+    "registration_platform": "医院官网",
+    "booking_note": "请以医院官网最新放号信息为准。",
+    "updated_at": "2026-04-17T12:00:00"
+  },
+  "广州市第一人民医院": {
+    "official_url": "https://www.gzsy.org/",
+    "registration_url": "https://www.gzsy.org/",
+    "registration_platform": "医院官网",
+    "booking_note": "请以医院官网最新放号信息为准。",
+    "updated_at": "2026-04-17T12:00:00"
+  }
+}

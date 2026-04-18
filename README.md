@@ -1,4 +1,4 @@
-# Zhishu Agent - 全人群智能就医调度与医旅管家
+﻿# Zhishu Agent - 全人群智能就医调度与医旅管家
 
 ## 项目概述
 
@@ -16,16 +16,18 @@
 
 ```
 Zhishu-Agent/
-├── skills/                    # 4 个核心 Skill
-│   ├── skill_1_intent/        # 意图理解与约束抽取
-│   ├── skill_2_crawl/         # 跨院号源巡航与标准化
-│   ├── skill_3_decision/      # 医旅协同与多目标决策
-│   └── skill_4_output/        # 结果生成与触达
+├── skills/                    # 5 个核心 Skill + 1 个底层地图 Skill
+│   ├── healthpath-intent-understanding/   # 意图结构化
+│   ├── healthpath-symptom-triage/         # 症状分诊与科室推荐
+│   ├── healthpath-hospital-matcher/       # 医院匹配
+│   ├── healthpath-registration-fetcher/   # 挂号链接采集
+│   ├── healthpath-itinerary-builder/      # 路线规划与 PDF 生成
+│   └── baidu-ai-map/                      # 地图底层能力
 ├── data/
 │   └── mock/                  # 模拟数据（医院库、号源库）
 ├── tests/
 │   └── test_integration.py    # 端到端集成测试
-├── output/                    # 生成的输出文件
+├── _generated/                # 生成的输出文件
 └── docs/                      # 文档
 ```
 
@@ -47,9 +49,9 @@ Zhishu Agent 已作为 AutoClaw Skill 注册。Skills 位置：
 C:\Users\Administrator\.openclaw-autoclaw\skills\
 ├── healthpath-agent/              # 主智能体
 ├── healthpath-intent-understanding/
-├── healthpath-hospital-crawler/
-├── healthpath-decision-engine/
-└── healthpath-output-generator/
+├── healthpath-hospital-matcher/
+├── healthpath-registration-fetcher/
+└── healthpath-itinerary-builder/
 ```
 
 #### 2. 启动 AutoClaw
@@ -84,9 +86,9 @@ cd project
 python tests/test_integration.py
 ```
 
-## 4 个核心 Skill
+## 5 个核心 Skill
 
-### Skill 1: 意图理解与约束抽取
+### Skill 1: healthpath-intent-understanding（意图结构化）
 
 **功能**：解析用户自然语言输入，提取结构化参数
 
@@ -109,34 +111,21 @@ python tests/test_integration.py
 }
 ```
 
-### Skill 2: 跨院号源巡航与标准化
+### Skill 2: healthpath-symptom-triage（症状分诊）
 
-**功能**：搜索多家医院的可用号源，标准化数据格式
+**功能**：根据症状推荐科室，识别危急信号，必要时生成追问。
 
-**输入**：结构化任务参数
-**输出**：统一格式的号源列表（包含医院、医生、时间、费用、排队预估等）
+### Skill 3: healthpath-hospital-matcher（医院匹配）
 
-### Skill 3: 医旅协同与多目标决策
+**功能**：基于用户位置 + 科室筛选候选医院，优先走百度地图能力，不可用时降级本地数据。
 
-**功能**：基于多个维度评估和排序方案
+### Skill 4: healthpath-registration-fetcher（挂号链接）
 
-**评分维度**：
+**功能**：查询缓存并解析医院官网，返回可用挂号入口信息。
 
-- 距离（权重 20%）
-- 交通时间（权重 30%）
-- 费用（权重 30%）
-- 排队时间（权重 20%）
+### Skill 5: healthpath-itinerary-builder（路线与行程单）
 
-**输出**：Top-2 推荐方案，包含推荐理由
-
-### Skill 4: 结果生成与触达
-
-**功能**：生成格式化输出文档
-
-**支持格式**：
-
-- 大字版 PDF（16pt+ 字体，高对比度，老年友好）
-- 标准 Excel（多 sheet，包含行程、交通、住宿等）
+**功能**：规划路线并生成最终 PDF 行程单（默认终态输出）。
 
 ## 典型使用场景
 
@@ -205,9 +194,9 @@ C:\Users\Administrator\.openclaw-autoclaw\openclaw.json
     "allowBundled": [
       "healthpath-agent",
       "healthpath-intent-understanding",
-      "healthpath-hospital-crawler",
-      "healthpath-decision-engine",
-      "healthpath-output-generator"
+      "healthpath-hospital-matcher",
+      "healthpath-registration-fetcher",
+      "healthpath-itinerary-builder"
     ]
   },
   "tools": {
@@ -279,3 +268,4 @@ cat docs/USAGE_GUIDE.md
 ## 联系方式
 
 项目地址：<https://github.com/jiezi1234/Zhishu.git>
+
