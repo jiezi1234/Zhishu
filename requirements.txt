@@ -4,6 +4,10 @@
 requests>=2.31.0          # HTTP client for API calls
 python-dotenv>=1.0.0      # Environment variable management
 
+# Semantic NLP (symptom triage + intent understanding)
+sentence-transformers>=3.0.0  # Semantic similarity; model: BAAI/bge-small-zh-v1.5
+numpy>=1.24.0                 # Vector operations
+
 # Output generation
 reportlab>=4.0.0          # PDF generation
 openpyxl>=3.1.0           # Excel generation

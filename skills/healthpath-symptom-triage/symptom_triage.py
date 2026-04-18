@@ -1,146 +1,160 @@
 """
-symptom_triage.py — 病情预判与科室推荐
+symptom_triage.py - 病情预判与科室推荐
 
-基于本地 yixue_knowledge.json 知识库，通过关键词匹配实现：
-  1. 危急症状检测（胸痛、卒中、大出血等）
-  2. 科室推荐（基于症状关键词映射）
-  3. 信息不足追问
-
-输入：
-  symptom_text   str   用户症状描述
-  user_profile   dict  {"age_group": "elderly"|"adult"|"child"}
-  extra_answers  dict  对追问的回答 {question_id: answer}
-
-输出：
-  {
-    "warning_flags":           list  危急提示
-    "need_more_info":          bool  是否需追问
-    "follow_up_questions":     list  [{id, question}]
-    "recommended_departments": list  推荐科室（第一项为主科室）
-    "preliminary_diagnosis":   str   初步判断
-    "referenced_routes":       list  参考的知识库路由
-    "disclaimer":              str   免责声明
-  }
+基于 semantic_matcher 对 yixue_knowledge.json 做语义检索，实现：
+1. 危急症状检测
+2. 科室推荐
+3. 信息不足时追问
 """
 
-import json
 import logging
 import os
-from typing import Optional
+import sys
+
+_SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_DIR = os.path.join(_SKILL_DIR, "..", "..", "config")
+if _CONFIG_DIR not in sys.path:
+    sys.path.insert(0, _CONFIG_DIR)
+
+from semantic_matcher import detect_emergency, normalize_symptoms, search_knowledge
 
 logger = logging.getLogger(__name__)
 
-_SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
-KNOWLEDGE_PATH = os.path.join(_SKILL_DIR, "yixue_knowledge.json")
+DISCLAIMER = (
+    "⚠️ 以上判断仅供参考，不构成医学诊断，不替代执业医师意见。"
+    "如症状严重或突发，请立即拨打 120 或前往最近急诊。"
+)
 
-# ── 危急症状关键词（来自 yixue 知识库内容）──────────────────────────
-EMERGENCY_KEYWORDS = [
-    "剧烈胸痛", "胸痛", "心肌梗塞", "心梗",
-    "脑卒中", "口角歪斜", "半身不遂", "突然晕倒",
-    "呼吸停止", "呼吸困难", "窒息",
-    "大出血", "大量出血", "吐血", "便血鲜红",
-    "失去意识", "昏迷", "意识不清",
-    "抽搐", "癫痫发作",
-    "休克", "血压骤降",
+_ROUTE_DEPT: list[tuple[str, str]] = [
+    ("常见症状辨病/疼痛/头痛", "神经内科"),
+    ("常见症状辨病/疼痛/胸痛", "心内科"),
+    ("常见症状辨病/疼痛/腹痛", "消化内科"),
+    ("常见症状辨病/疼痛/腰背痛", "骨科"),
+    ("常见症状辨病/心悸", "心内科"),
+    ("常见症状辨病/发热", "发热门诊"),
+    ("常见症状辨病/咳嗽", "呼吸科"),
+    ("常见症状辨病/咯血", "呼吸科"),
+    ("常见症状辨病/便血", "消化内科"),
+    ("常见症状辨病/呕血", "消化内科"),
+    ("常见症状辨病/恶心与呕吐", "消化内科"),
+    ("常见症状辨病/尿血", "泌尿科"),
+    ("常见症状辨病/鼻出血", "耳鼻喉科"),
+    ("常见症状辨病/水肿", "肾内科"),
+    ("常见症状辨病/皮肤粘膜出血", "血液科"),
+    ("常见症状辨病/感觉器官功能异常", "神经内科"),
+    ("观察机体局部辨病/眼睛", "眼科"),
+    ("观察机体局部辨病/皮肤", "皮肤科"),
+    ("观察机体局部辨病/口腔", "口腔科"),
+    ("观察机体局部辨病/四肢形态", "骨科"),
+    ("观察机体局部辨病/脊柱", "骨科"),
+    ("观察机体局部辨病/颈部", "骨科"),
+    ("观察机体局部辨病/胸廓形态", "呼吸科"),
+    ("观察机体局部辨病/脉搏", "心内科"),
+    ("观察机体局部辨病/腹部", "消化内科"),
+    ("观察机体局部辨病/头颅", "神经内科"),
+    ("观察机体局部辨病/毛发", "皮肤科"),
+    ("观察机体局部辨病/眉毛", "内分泌科"),
+    ("观察机体局部辨病/鼻", "耳鼻喉科"),
+    ("观察机体局部辨病/耳", "耳鼻喉科"),
+    ("观察分泌物排泄物辨病/痰液", "呼吸科"),
+    ("观察分泌物排泄物辨病/鼻涕", "耳鼻喉科"),
+    ("观察分泌物排泄物辨病/大便", "消化内科"),
+    ("观察分泌物排泄物辨病/小便", "泌尿科"),
+    ("观察分泌物排泄物辨病/汗液异常", "内分泌科"),
+    ("饮食起居辨病/失眠", "神经内科"),
+    ("饮食起居辨病/嗜睡", "神经内科"),
+    ("饮食起居辨病/睡眠", "神经内科"),
+    ("饮食起居辨病/说话异常", "神经内科"),
+    ("饮食起居辨病/运动异常", "神经内科"),
+    ("饮食起居辨病/饮食", "消化内科"),
+    ("妇科疾病/", "妇科"),
+    ("儿童疾病/", "儿科"),
 ]
 
-# ── 症状→科室映射（基于 yixue 知识库路由）──────────────────────────
-SYMPTOM_DEPT_MAP = [
-    # 骨科
-    (["腰痛", "腰疼", "腰背痛", "颈椎", "背痛", "骨折", "关节痛", "关节", "骨头"], "骨科"),
-    # 神经内科
-    (["头痛", "头疼", "头晕", "眩晕", "失眠", "睡眠", "记忆力", "手脚麻木"], "神经内科"),
-    # 心内科
-    (["心悸", "心跳", "心慌", "胸闷"], "心内科"),
-    # 呼吸科
-    (["咳嗽", "咳痰", "呼吸", "哮喘", "气喘", "痰"], "呼吸科"),
-    # 消化内科
-    (["腹痛", "腹泻", "恶心", "呕吐", "胃痛", "胃", "消化", "拉肚子", "便秘"], "消化内科"),
-    # 感染科/内科
-    (["发热", "发烧", "体温", "高烧", "低烧"], "感染科"),
-    # 耳鼻喉科
-    (["鼻出血", "流鼻血", "耳鸣", "耳朵", "听力", "咽喉", "喉咙"], "耳鼻喉科"),
-    # 皮肤科
-    (["皮肤", "皮疹", "痒", "红疹", "湿疹"], "皮肤科"),
-    # 泌尿科
-    (["尿频", "尿急", "尿痛", "小便", "排尿"], "泌尿科"),
-    # 妇科
-    (["月经", "白带", "阴道", "妇科", "例假"], "妇科"),
-    # 儿科
-    (["儿童", "小孩", "宝宝", "婴儿", "孩子"], "儿科"),
-    # 眼科
-    (["眼睛", "视力", "眼", "看不清"], "眼科"),
-]
+_PARENT_ONLY_ROUTES = {
+    "常见症状辨病",
+    "常见症状辨病/疼痛",
+    "常见症状辨病/出血",
+    "神色形态辨病",
+    "观察机体局部辨病",
+    "观察分泌物排泄物辨病",
+    "饮食起居辨病",
+    "儿童疾病",
+    "妇科疾病",
+}
 
-DISCLAIMER = "⚠️ 以上判断仅供参考，不构成医学诊断，不替代执业医师意见。如症状严重或突发，请立即拨打 120 或前往最近急诊。"
+_TERM_DEPT_RULES = {
+    "体位性头晕": {"boost": {"神经内科": 3.0, "心内科": 2.5}, "suppress": {"眼科": 2.5}},
+    "黑矇": {"boost": {"神经内科": 2.5, "心内科": 2.0}, "suppress": {"眼科": 2.0}},
+    "尿痛": {"boost": {"泌尿科": 4.0}, "suppress": {"消化内科": 3.0, "儿科": 1.5}},
+    "心悸": {"boost": {"心内科": 4.0}, "suppress": {"肾内科": 2.5}},
+    "呼吸困难": {"boost": {"呼吸科": 2.0, "心内科": 1.5}, "suppress": {}},
+    "发热": {"boost": {"发热门诊": 3.5, "呼吸科": 2.0, "感染科": 2.0}, "suppress": {"神经内科": 3.0, "骨科": 2.0}},
+    "关节炎": {"boost": {"骨科": 3.5, "风湿免疫科": 3.0}, "suppress": {"妇科": 5.0, "神经内科": 2.0}},
+    "耳痛": {"boost": {"耳鼻喉科": 4.0}, "suppress": {"神经内科": 4.0}},
+    "耳鸣": {"boost": {"耳鼻喉科": 4.0}, "suppress": {"神经内科": 4.0}},
+    "颈部僵硬": {"boost": {"骨科": 3.5, "康复科": 2.5}, "suppress": {"神经内科": 3.0}},
+}
 
 
-def triage(symptom_text: str,
-           user_profile: Optional[dict] = None,
-           extra_answers: Optional[dict] = None) -> dict:
-    """
-    病情预判与科室推荐主函数。
-
-    Returns
-    -------
-    dict — 见模块级文档
-    """
+def triage(symptom_text: str, user_profile: dict | None = None, extra_answers: dict | None = None) -> dict:
     user_profile = user_profile or {}
     extra_answers = extra_answers or {}
     age_group = user_profile.get("age_group", "adult")
+    normalized = normalize_symptoms(symptom_text)
 
-    logger.info(f"[symptom_triage] 输入: {symptom_text[:50]}")
+    logger.info(f"[symptom_triage] 输入: {symptom_text[:60]}")
 
-    # ── Step 1: 危急检测 ──────────────────────────────────────────
-    warning_flags = _detect_emergency(symptom_text)
-    if warning_flags:
-        logger.warning(f"[symptom_triage] 检测到危急症状: {warning_flags}")
+    if len(symptom_text.strip()) < 5 and not normalized["canonical_terms"]:
+        return _need_more(
+            diagnosis="信息不足，需要更多症状描述。",
+            questions=[
+                {"id": "symptom_detail", "question": "请详细描述您的不适症状，例如部位、性质和持续时间。"},
+                {"id": "duration", "question": "症状持续多久了？"},
+            ],
+            routes=[],
+        )
+
+    flags = detect_emergency(symptom_text)
+    if flags:
+        logger.warning(f"[symptom_triage] 检测到危急症状: {flags}")
         return {
-            "warning_flags": warning_flags,
+            "warning_flags": flags,
             "need_more_info": False,
             "follow_up_questions": [],
             "recommended_departments": [],
-            "preliminary_diagnosis": "检测到危急症状，建议立即就近急诊或拨打 120！",
+            "preliminary_diagnosis": "检测到危急症状，建议立即就近急诊或拨打 120。",
             "referenced_routes": ["常见症状辨病/疼痛/胸痛", "常见症状辨病/心悸"],
             "disclaimer": DISCLAIMER,
         }
 
-    # ── Step 2: 信息不足检测 ──────────────────────────────────────
-    if len(symptom_text.strip()) < 5:
-        return {
-            "warning_flags": [],
-            "need_more_info": True,
-            "follow_up_questions": [
-                {"id": "symptom_detail", "question": "请详细描述您的不适症状（如疼痛部位、持续时间等）"},
-                {"id": "duration", "question": "症状持续多久了？"},
+    hits = search_knowledge(symptom_text, k=5)
+    logger.info(f"[symptom_triage] 检索命中: {[(h['route'], h['score']) for h in hits]}")
+
+    if not hits:
+        return _need_more(
+            diagnosis="暂未能稳定识别症状，需要进一步描述。",
+            questions=[
+                {"id": "symptom_location", "question": "不适的具体部位在哪里？例如头部、胸部、腹部。"},
+                {"id": "symptom_nature", "question": "主要是疼痛、发热、头晕还是其他症状？"},
             ],
-            "recommended_departments": [],
-            "preliminary_diagnosis": "信息不足，需要更多症状描述",
-            "referenced_routes": [],
-            "disclaimer": DISCLAIMER,
-        }
+            routes=[],
+        )
 
-    # ── Step 3: 科室推荐 ──────────────────────────────────────────
-    departments = _match_departments(symptom_text, age_group)
-
-    if not departments:
-        # 无匹配 → 追问
-        return {
-            "warning_flags": [],
-            "need_more_info": True,
-            "follow_up_questions": [
-                {"id": "symptom_location", "question": "不适的具体部位在哪里？（如头部、胸部、腹部等）"},
-                {"id": "symptom_nature", "question": "是疼痛、发热、还是其他症状？"},
+    top_route = hits[0]["route"]
+    if top_route in _PARENT_ONLY_ROUTES:
+        return _need_more(
+            diagnosis="症状描述还不够具体，需要进一步了解。",
+            questions=[
+                {"id": "symptom_location", "question": "不适的具体部位在哪里？"},
+                {"id": "symptom_nature", "question": "症状更像疼痛、发热、头晕还是排尿异常？"},
             ],
-            "recommended_departments": [],
-            "preliminary_diagnosis": "症状描述不够明确，需要进一步了解",
-            "referenced_routes": ["常见症状辨病"],
-            "disclaimer": DISCLAIMER,
-        }
+            routes=[h["route"] for h in hits[:3]],
+        )
 
-    # ── Step 4: 生成初步判断 ──────────────────────────────────────
-    diagnosis = _generate_diagnosis(symptom_text, departments, age_group)
-    referenced = _get_referenced_routes(departments)
+    departments = _rank_departments(symptom_text, hits, age_group)
+    referenced = [h["route"] for h in hits[:3]]
+    diagnosis = _generate_diagnosis(symptom_text, departments, hits[0], age_group)
 
     logger.info(f"[symptom_triage] 推荐科室: {departments}")
 
@@ -155,87 +169,99 @@ def triage(symptom_text: str,
     }
 
 
-# ── 内部函数 ──────────────────────────────────────────────────────
-
-def _detect_emergency(text: str) -> list:
-    """检测危急症状关键词"""
-    flags = []
-    for keyword in EMERGENCY_KEYWORDS:
-        if keyword in text:
-            flags.append(f"检测到「{keyword}」，可能为急症")
-    return flags
+def _route_to_dept(route: str) -> str | None:
+    for prefix, dept in _ROUTE_DEPT:
+        if route.startswith(prefix):
+            return dept
+    return None
 
 
-def _match_departments(text: str, age_group: str) -> list:
-    """
-    基于关键词匹配推荐科室。
-    返回最多 3 个科室，按匹配度排序。
-    """
-    matches = []
+def _rank_departments(symptom_text: str, hits: list[dict], age_group: str) -> list[str]:
+    normalized = normalize_symptoms(symptom_text)
+    scores: dict[str, float] = {}
 
-    # 儿童优先儿科
+    for idx, hit in enumerate(hits[:5]):
+        route = hit["route"]
+        if route in _PARENT_ONLY_ROUTES:
+            continue
+        dept = _route_to_dept(route)
+        if not dept:
+            continue
+        weight = 3.0 if idx == 0 else 1.5 if idx == 1 else 0.8
+        scores[dept] = scores.get(dept, 0.0) + weight + float(hit["score"])
+
+    for term in normalized["canonical_terms"]:
+        rule = _TERM_DEPT_RULES.get(term)
+        if not rule:
+            continue
+        for dept, boost in rule.get("boost", {}).items():
+            scores[dept] = scores.get(dept, 0.0) + boost
+        for dept, suppress in rule.get("suppress", {}).items():
+            scores[dept] = scores.get(dept, 0.0) - suppress
+
     if age_group == "child":
-        for keywords, dept in SYMPTOM_DEPT_MAP:
-            if dept == "儿科":
-                matches.append((dept, 10))  # 高优先级
-                break
+        scores["儿科"] = scores.get("儿科", 0.0) + 0.5
 
-    # 关键词匹配
-    for keywords, dept in SYMPTOM_DEPT_MAP:
-        score = sum(1 for kw in keywords if kw in text)
-        if score > 0:
-            matches.append((dept, score))
+    ranked_pairs = [(dept, score) for dept, score in sorted(scores.items(), key=lambda item: item[1], reverse=True) if score > 0]
+    if not ranked_pairs:
+        return _hits_to_departments(hits, age_group)
 
-    # 去重并排序
-    dept_scores = {}
-    for dept, score in matches:
-        dept_scores[dept] = dept_scores.get(dept, 0) + score
+    if len(ranked_pairs) == 1:
+        return [ranked_pairs[0][0]]
 
-    sorted_depts = sorted(dept_scores.items(), key=lambda x: x[1], reverse=True)
-    return [dept for dept, _ in sorted_depts[:3]]
+    top_dept, top_score = ranked_pairs[0]
+    second_dept, second_score = ranked_pairs[1]
+    if second_score < top_score * 0.75 or top_score - second_score > 2.0:
+        return [top_dept]
+    return [top_dept, second_dept]
 
 
-def _generate_diagnosis(text: str, departments: list, age_group: str) -> str:
-    """生成用户可读的初步判断"""
+def _hits_to_departments(hits: list[dict], age_group: str) -> list[str]:
+    depts = []
+    for hit in hits:
+        if hit["route"] in _PARENT_ONLY_ROUTES:
+            continue
+        dept = _route_to_dept(hit["route"])
+        if dept and dept not in depts:
+            depts.append(dept)
+
+    if age_group == "child" and "儿科" not in depts:
+        depts = ["儿科"] + depts
+
+    return depts[:2]
+
+
+def _generate_diagnosis(text: str, departments: list[str], top_hit: dict, age_group: str) -> str:
     main_dept = departments[0] if departments else "内科"
+    route_label = top_hit["route"].replace("/", " -> ")
 
     diagnosis = f"根据您描述的症状，建议优先就诊【{main_dept}】。"
+    diagnosis += f"（参考：{route_label}）"
 
     if len(departments) > 1:
-        others = "、".join(departments[1:])
-        diagnosis += f" 也可考虑【{others}】。"
+        diagnosis += f" 备选可考虑【{departments[1]}】。"
 
     if age_group == "elderly":
-        diagnosis += " 老年人如有多种慢性病，建议携带既往病历和用药清单。"
+        diagnosis += " 老年患者建议携带既往病史和用药清单。"
     elif age_group == "child":
-        diagnosis += " 儿童就诊建议由家长陪同，携带疫苗接种记录。"
+        diagnosis += " 儿童就诊建议由家长陪同。"
 
     return diagnosis
 
 
-def _get_referenced_routes(departments: list) -> list:
-    """根据科室返回对应的知识库路由"""
-    route_map = {
-        "骨科": ["常见症状辨病/疼痛/腰背痛"],
-        "神经内科": ["常见症状辨病/疼痛/头痛", "饮食起居辨病/失眠"],
-        "心内科": ["常见症状辨病/心悸", "常见症状辨病/疼痛/胸痛"],
-        "呼吸科": ["常见症状辨病/咳嗽"],
-        "消化内科": ["常见症状辨病/疼痛/腹痛", "常见症状辨病/恶心与呕吐"],
-        "感染科": ["常见症状辨病/发热"],
-        "儿科": ["儿童疾病/常见症状"],
+def _need_more(diagnosis: str, questions: list[dict], routes: list[str]) -> dict:
+    return {
+        "warning_flags": [],
+        "need_more_info": True,
+        "follow_up_questions": questions,
+        "recommended_departments": [],
+        "preliminary_diagnosis": diagnosis,
+        "referenced_routes": routes,
+        "disclaimer": DISCLAIMER,
     }
 
-    routes = []
-    for dept in departments:
-        routes.extend(route_map.get(dept, []))
-
-    return routes[:3]  # 最多返回 3 条
-
-
-# ── 便捷入口（AutoClaw / GLM 统一调用）────────────────────────────
 
 def run(symptom_text: str, **kwargs) -> dict:
-    """AutoClaw / GLM 调用的统一入口"""
     return triage(
         symptom_text=symptom_text,
         user_profile=kwargs.get("user_profile"),
@@ -243,20 +269,23 @@ def run(symptom_text: str, **kwargs) -> dict:
     )
 
 
-# ── 命令行快速测试 ────────────────────────────────────────────────
-
 if __name__ == "__main__":
     test_cases = [
         ("老人头晕失眠两周了", {"age_group": "elderly"}),
-        ("最近腰疼，想看骨科", {"age_group": "adult"}),
+        ("最近腰不舒服，上楼梯膝盖响", {"age_group": "adult"}),
         ("剧烈胸痛，呼吸困难", {"age_group": "adult"}),
-        ("咳嗽", {"age_group": "adult"}),
+        ("拉稀水样便，肚子一阵一阵疼", {"age_group": "adult"}),
+        ("小便时刺痛，尿急", {"age_group": "adult"}),
+        ("心里扑腾扑腾的，喘不上气", {"age_group": "adult"}),
+        ("眼前发黑，站起来头晕", {"age_group": "adult"}),
+        ("痛", {"age_group": "adult"}),
     ]
 
     for text, profile in test_cases:
-        print(f"\n── 测试：{text} ──")
+        print(f"\n=== 测试：{text} ===")
         result = triage(text, user_profile=profile)
-        print(f"危急: {result['warning_flags']}")
-        print(f"科室: {result['recommended_departments']}")
-        print(f"判断: {result['preliminary_diagnosis']}")
-        print(f"追问: {result['need_more_info']}")
+        print(f"  危急: {result['warning_flags']}")
+        print(f"  科室: {result['recommended_departments']}")
+        print(f"  判断: {result['preliminary_diagnosis']}")
+        print(f"  路由: {result['referenced_routes']}")
+        print(f"  追问: {result['need_more_info']}")
