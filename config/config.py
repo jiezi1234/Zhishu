@@ -7,7 +7,7 @@ load_dotenv()
 
 
 class Config:
-    """HealthPath Agent 运行配置"""
+    """智枢 运行配置"""
 
     # AutoClaw 工作区路径
     AUTOCLAW_WORKSPACE = os.getenv(

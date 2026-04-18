@@ -1,5 +1,5 @@
-﻿"""
-main_skill.py — HealthPath Agent 主入口
+"""
+main_skill.py — 智枢——基于长链路协同的全人群医旅调度智能体 主入口
 
 统一 5 步流程：
   1) healthpath-intent-understanding
@@ -38,9 +38,9 @@ from itinerary_builder import build
 
 
 class HealthPathAgent:
-    name = "HealthPath Agent"
+    name = "智枢"
     version = "3.0.0"
-    description = "从症状描述到就医行程单的一站式智能就医调度助手"
+    description = "基于长链路协同的全人群医旅调度智能体"
 
     def execute(
         self,
@@ -51,7 +51,7 @@ class HealthPathAgent:
         output_format: str = "large_font_pdf",
         user_profile: Optional[dict] = None,
     ) -> Dict[str, Any]:
-        logger.info("[HealthPath] 开始处理: %s", user_input[:80])
+        logger.info("[智枢] 开始处理: %s", user_input[:80])
         result: Dict[str, Any] = {
             "status": "success",
             "steps": {},
@@ -62,7 +62,7 @@ class HealthPathAgent:
 
         try:
             # Step 1: 意图结构化
-            intent_result = parse_intent(user_input, use_deepseek=False)
+            intent_result = parse_intent(user_input, use_deepseek=True)
             result["steps"]["intent"] = intent_result
             explicit_dept = (intent_result or {}).get("department", "")
             has_explicit_dept = bool(explicit_dept and explicit_dept != "未指定")
@@ -168,7 +168,7 @@ class HealthPathAgent:
         except Exception as e:
             import traceback
 
-            logger.error("[HealthPath] 执行失败: %s", e)
+            logger.error("[智枢] 执行失败: %s", e)
             result["status"] = "error"
             result["error"] = str(e)
             result["traceback"] = traceback.format_exc()
