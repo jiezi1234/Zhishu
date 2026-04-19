@@ -4,6 +4,21 @@ This folder is home. Treat it that way.
 
 ## 🚨 Highest-Priority Rules
 
+### 📁 文件创建位置规则
+
+Agent 新建文件（`Write` 工具）**只允许**落在以下目录：
+
+- `agent_workspace/` — 自建脚本、临时文件、实验性代码、调试产物
+- `memory/` — 日志、每日笔记、MEMORY 相关
+- `_generated/` — PDF 行程单等运行时产物
+- `cache/` — 业务缓存（如 hospital_cache.db）
+
+**其他位置禁止新建文件**，包括但不限于 `skills/`、`config/`、`tests/`、`data/`、`lib/`、项目根目录。
+
+**允许的例外：**
+- 修改已有文件（`Edit` 工具）不受此规则约束。
+- 若确需在受限目录新建代码（例如新增一个 skill、新增测试），必须先**明确告知 Owner 并获得授权**后再动手，不可自作主张。
+
 ### 📋 Skills 优先级规则
 
 #### 医疗相关任务（关键词：医院、挂号、就医、看医生、医疗咨询）
