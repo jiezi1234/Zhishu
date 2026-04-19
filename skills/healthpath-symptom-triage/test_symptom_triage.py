@@ -36,3 +36,18 @@ def test_palpitations_should_not_recommend_nephrology():
     result = module.triage("心慌", user_profile={"age_group": "adult"})
     assert result["recommended_departments"][0] == "心内科", result
     assert "肾内科" not in result["recommended_departments"], result
+
+
+def test_muscle_soreness_should_not_route_to_fever():
+    module = _load_module()
+    result = module.triage("昨天感觉腿很酸", user_profile={"age_group": "elderly"})
+    assert result["recommended_departments"], result
+    assert result["recommended_departments"][0] in {"骨科", "康复科", "风湿免疫科"}, result
+    assert "发热门诊" not in result["recommended_departments"], result
+
+
+def test_vague_input_should_trigger_followup():
+    module = _load_module()
+    result = module.triage("不太舒服", user_profile={"age_group": "adult"})
+    assert result["need_more_info"], result
+    assert not result["recommended_departments"], result
