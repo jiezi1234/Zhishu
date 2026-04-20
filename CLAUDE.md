@@ -19,17 +19,22 @@ AutoClaw runs at `http://127.0.0.1:18789`. The skill is invoked via `from main_s
 ## Commands
 
 ```bash
-# Quick smoke test of the main agent (v2.0 hierarchy)
+# Quick smoke test of the main agent (unified 5-step hierarchy, v3.0.0)
 python main_skill.py
 
-# Run integration tests (unified 5-step hierarchy)
+# Run integration tests
 python tests/test_integration.py
+# Or a single test via pytest:
+pytest tests/test_integration.py::test_execute_full_flow_generates_output -v
 
 # Run end-to-end smoke test
 python tests/test_end_to_end.py
 
 # Run demo
 python demo/demo.py
+
+# Verify PDF output renders correctly (parses a generated PDF)
+python demo/parse_pdf.py
 
 # Register / re-register skills with AutoClaw
 python config/autoclaw_integration.py
@@ -68,8 +73,9 @@ The flow is **conversational and stateful** — `execute()` returns early to ask
 
 ### Supporting Components
 
-- **`config/config.py`** — `Config` class; reads `BAIDU_MAP_AUTH_TOKEN` and `OUTPUT_DIR` from env. `BASE_DIR` / `OUTPUT_DIR` / `MOCK_DATA_DIR` paths all derived here.
+- **`config/config.py`** — `Config` class; reads `BAIDU_MAP_AUTH_TOKEN` and `OUTPUT_DIR` from env. `BASE_DIR` / `OUTPUT_DIR` (defaults to `<project>/output/`) / `MOCK_DATA_DIR` paths all derived here.
 - **`config/deepseek_client.py`** — DeepSeek API wrapper (optional; current main flow defaults to rule-based intent parsing).
+- **`config/semantic_matcher.py`** — Semantic similarity engine backing symptom triage and intent understanding. Uses `sentence-transformers` with `BAAI/bge-small-zh-v1.5` (~90MB; override via `ST_MODEL`). Model downloads through `HF_ENDPOINT` (defaults to `hf-mirror.com` for CN users).
 - **`config/autoclaw_integration.py`** — Registers all skills into AutoClaw's `openclaw.json`.
 - **`data/mock/`** — Mock hospital data (`hospitals.json`, `available_slots.json`) used when real APIs are unavailable.
 - **`data/医疗机构基本信息2023-03-29.csv`** — Real Beijing hospital CSV (4,311 entries) used by `hospital_matcher` as the primary data source.
@@ -108,7 +114,9 @@ These are hard constraints — enforce them in code, never bypass:
 - Python 3.9+
 - `BAIDU_MAP_AUTH_TOKEN` env var — enables full-country hospital search and precise routing (without it, falls back to local Beijing CSV + district estimates)
 - `DEEPSEEK_API_KEY` env var — optional for DeepSeek-based intent extraction
-- `OUTPUT_DIR` env var (if not set, itinerary output defaults to `_generated/` under project root)
+- `OUTPUT_DIR` env var — if not set, itinerary output defaults to `<project>/output/`
+- `HF_ENDPOINT` env var — HuggingFace mirror for semantic model download; defaults to `hf-mirror.com` (CN-friendly)
+- `ST_MODEL` env var — override semantic model (default `BAAI/bge-small-zh-v1.5`; upgrade to `BAAI/bge-base-zh-v1.5` for ~400MB higher-precision variant)
 - Copy `.env.example` → `.env` and fill in keys before running
 
 ## AutoClaw Integration

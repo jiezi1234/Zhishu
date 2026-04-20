@@ -1,6 +1,6 @@
 ﻿{
   "name": "healthpath-agent",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "智能医疗就诊路线规划系统，帮助用户完成从症状到就医行程单的全流程决策",
   "author": "HealthPath Team",
   "license": "MIT",

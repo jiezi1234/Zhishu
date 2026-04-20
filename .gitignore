@@ -27,10 +27,10 @@ output/
 *.log
 
 # Skills 私有缓存（运行时生成，不纳入版本控制）
-skills/hospital_matcher/blacklist.json
-skills/registration_fetcher/hospital_info.json
-skills/registration_fetcher/data_corrections.json
-skills/itinerary_builder/user_history.json
+skills/healthpath-hospital-matcher/blacklist.json
+skills/healthpath-registration-fetcher/hospital_info.json
+skills/healthpath-registration-fetcher/data_corrections.json
+skills/healthpath-itinerary-builder/user_history.json
 
 # IDE
 .vscode/
@@ -50,4 +50,3 @@ Thumbs.db
 
 # CLAUDE
 CLAUDE.md.openclaw/
-demo/

@@ -12,7 +12,7 @@ import itinerary_builder
 
 def test_get_info_skills():
     info = get_info()
-    assert info["name"] == "HealthPath Agent"
+    assert info["name"] == "智枢"
     assert "healthpath-intent-understanding" in info["skills"]
     assert "healthpath-itinerary-builder" in info["skills"]
 
@@ -39,3 +39,10 @@ def test_execute_full_flow_generates_output():
     pdf_path = result["final_output"].get("pdf_path", "")
     assert pdf_path
     assert os.path.exists(pdf_path)
+
+
+def test_execute_returns_emergency_warning_for_chest_pain_with_dyspnea():
+    result = execute(user_input="剧烈胸痛，呼吸困难")
+    assert result["status"] == "emergency_warning"
+    assert "warning" in result["final_output"]
+    assert "match" not in result["steps"]
