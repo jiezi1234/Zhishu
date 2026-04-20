@@ -1,6 +1,6 @@
 # SKILL_PREFERENCES.md — HealthPath Skill 使用指南
 
-> 本文件是 `AGENTS.md` 的补充，专项说明 HealthPath 医疗预约工作流中五个 skill 的使用场景、调用顺序与边界。
+> 本文件是 `AGENTS.md` 的补充，专项说明 HealthPath 医疗预约工作流中六个 skill 的使用场景、调用顺序与边界。
 > Agent 在处理任何医疗相关任务时，**必须先阅读本文件**。
 
 ## ⚡ 核心原则（最高优先级）
@@ -17,13 +17,13 @@
 
 ---
 
-## 一、标准工作流（五步顺序）
+## 一、标准工作流（六步顺序）
 
 ```
 用户自然语言输入
       │
       ▼
-[1] healthpath-intent-understanding   ← 解析意图，提取结构化参数
+[1] healthpath-intent-understanding   ← 解析意图，提取结构化参数(含 doctor_name)
       │
       ▼
 [2] healthpath-symptom-triage         ← 根据症状推荐科室（用户已明确科室时可跳过）
@@ -35,7 +35,10 @@
 [4] healthpath-registration-fetcher   ← 获取用户选定医院的官网 URL
       │
       ▼
-[5] healthpath-itinerary-builder      ← 生成完整就医行程单（PDF）
+[5] healthpath-doctor-schedule        ← 抓医生出诊表+号源,按评分推荐就诊时段
+      │
+      ▼
+[6] healthpath-itinerary-builder      ← 生成完整就医行程单(PDF,含医生与推荐)
 ```
 
 ---
@@ -80,7 +83,31 @@
 
 ---
 
-### [5] healthpath-itinerary-builder
+### [5] healthpath-doctor-schedule(新)
+
+**触发条件:** 已从 registration-fetcher 拿到挂号入口 URL 后,需要:
+- 用户已指名医生(`intent.doctor_name` 非空或 `selected_doctor` 传入) → 直接抓出诊表
+- 用户未指名医生 → 先抓该科室专家列表让用户选
+
+**输入依赖:** 来自 registration-fetcher 的 `registration_url`(或 official_url 兜底)。
+
+**输出:**
+- 成功:`schedule`(出诊表+号源)+ `recommendation`(推荐就诊时段)+ 最多 2 个 `alternatives`
+- 全满:`status='schedule_fetched_but_full'`,附 `warning`
+- 找不到医生:`status='doctor_not_found'`,由 agent 请用户澄清
+- 登录/验证码:`status='awaiting_browser_interaction'`,透传 `browser_session`
+- 未选医生:`status='awaiting_doctor_selection'`,返回 `experts` 列表
+
+**强制规则:**
+- `registration_url` **只能**从 registration-fetcher 来,本 skill 不自查域名
+- 一次对话内最多触发 1 次 autoclaw(不得自动重试)
+- autoclaw 不可用时,静默降级:跳过本步,仍生成 PDF(只是 PDF 里无推荐时段)
+- 禁止缓存 `slots`(号源实时抓)
+- `task` 参数不改写用户原话,模板填充后禁双引号禁换行
+
+---
+
+### [6] healthpath-itinerary-builder
 **触发条件：** 已获取 `registration_fetcher` 的返回值，且用户已确认就诊计划，需要生成行程单时。  
 **输入依赖：** `hospital_matcher` 的医院信息 + `registration_fetcher` 的挂号信息 + 用户的出发地和预约时间。  
 **输出：** PDF 行程单文件路径（未安装 `reportlab` 时降级为 `.txt`，功能完整）。  
@@ -96,7 +123,8 @@
 | "帮我找骨科医院" | [3] hospital-matcher（已知科室，跳过 triage） |
 | "我胸口剧烈疼痛" | [2] symptom-triage（检测危急，可能终止流程） |
 | "就去协和吧，帮我查挂号" | [4] registration-fetcher |
-| "帮我生成行程单" | [5] itinerary-builder（需确认已有前序输出） |
+| "挂协和王立凡医生的号" | [4] registration-fetcher → [5] doctor-schedule |
+| "帮我生成行程单" | [6] itinerary-builder（需确认已有前序输出） |
 
 ---
 
@@ -108,3 +136,6 @@
 - ❌ **不要将未验证的 `official_url` 直接展示给用户**，必须先确认可访问性。
 - ❌ **不要直接操作 `blacklist.json`**，用 `hospital_matcher.add_to_blacklist()` 接口。
 - ❌ **不要在 itinerary-builder 之后再调用其他 skill**，它是终态。
+- ❌ **不要在 doctor-schedule 内重试 autoclaw**,一次调用返回即为结果,需重试由用户下一轮主动触发。
+- ❌ **不要缓存 `slots` 字段**,号源实时变动,缓存必误导用户。
+- ❌ **不要让 doctor-schedule 失败阻塞整个流程**,L1/L2/L3 三层降级均需回退到"官网 URL + 无推荐时段"的 PDF。

@@ -82,7 +82,8 @@ def build(user_location: str,
           registration_info: dict,
           appointment_time: Optional[str] = None,
           output_format: str = "large_font_pdf",
-          user_profile: Optional[dict] = None) -> dict:
+          user_profile: Optional[dict] = None,
+          doctor_schedule: Optional[dict] = None) -> dict:
     """
     构建完整的就医行程单并生成 PDF。
 
@@ -108,6 +109,26 @@ def build(user_location: str,
     # 4. 院内导引 ─────────────────────────────────────────────────────
     nav_steps = _build_nav_steps(hospital_name, department, registration_info)
 
+    # 4.5 医生 & 推荐注入 ─────────────────────────────────────────────
+    if doctor_schedule:
+        doctor = doctor_schedule.get("doctor") or {}
+        rec = doctor_schedule.get("recommendation")
+        warning = doctor_schedule.get("warning")
+        if doctor.get("name"):
+            doctor_line = f"【医生】{doctor['name']}"
+            if doctor.get("title"):
+                doctor_line += f" ({doctor['title']})"
+            if doctor.get("specialty"):
+                doctor_line += f",擅长:{doctor['specialty']}"
+            nav_steps.insert(0, doctor_line)
+        if rec:
+            rec_line = f"【建议就诊】{rec.get('date', '')} {rec.get('period', '')}"
+            if rec.get("reason"):
+                rec_line += f" — {rec['reason']}"
+            nav_steps.insert(1 if doctor.get("name") else 0, rec_line)
+        if warning:
+            nav_steps.insert(0, f"【提示】{warning}")
+
     # 5. 生成 PDF ──────────────────────────────────────────────────────
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
     pdf_path   = _generate_pdf(
@@ -123,6 +144,7 @@ def build(user_location: str,
         age_group=age_group,
         output_format=output_format,
         timestamp=timestamp,
+        doctor_schedule=doctor_schedule,
     )
 
     # 6. 持久化历史 ───────────────────────────────────────────────────
@@ -582,7 +604,8 @@ def _build_nav_steps(hospital_name: str, department: str, reg_info: dict) -> lis
 def _generate_pdf(hospital_name, hospital_address, department,
                   registration_info, appointment_time, route,
                   depart_time, checklist, nav_steps,
-                  age_group, output_format, timestamp) -> str:
+                  age_group, output_format, timestamp,
+                  doctor_schedule=None) -> str:
     """
     生成 PDF 行程单，调用当前目录下的 pdf_generator.py。
     """
@@ -606,6 +629,9 @@ def _generate_pdf(hospital_name, hospital_address, department,
         "score":                reg.get("score", 0),
         "reason":               route.get("description", ""),
     }]
+    ds = doctor_schedule or {}
+    ds_doctor = ds.get("doctor") or {}
+    ds_rec = ds.get("recommendation") or {}
     task_params = {
         "department":           department,
         "symptom":              reg.get("symptom", ""),
@@ -627,6 +653,13 @@ def _generate_pdf(hospital_name, hospital_address, department,
         "nav_steps":            nav_steps,
         # 出行清单（按年龄定制）
         "checklist":            checklist,
+        # 医生与推荐(pdf_generator 可选读取)
+        "doctor_name":          ds_doctor.get("name", ""),
+        "doctor_title":         ds_doctor.get("title", ""),
+        "doctor_specialty":     ds_doctor.get("specialty", ""),
+        "recommended_date":     ds_rec.get("date", ""),
+        "recommended_period":   ds_rec.get("period", ""),
+        "recommendation_reason": ds_rec.get("reason", ""),
     }
 
     generate_pdf_document(recommendations, task_params, filepath, large_font=large_font)

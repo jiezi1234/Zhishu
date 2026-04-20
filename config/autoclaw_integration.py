@@ -41,6 +41,10 @@ class AutoClawIntegration:
                 "source": self.project_root / "skills" / "healthpath-registration-fetcher",
             },
             {
+                "name": "healthpath-doctor-schedule",
+                "source": self.project_root / "skills" / "healthpath-doctor-schedule",
+            },
+            {
                 "name": "healthpath-itinerary-builder",
                 "source": self.project_root / "skills" / "healthpath-itinerary-builder",
             },
@@ -84,6 +88,7 @@ class AutoClawIntegration:
             "healthpath-symptom-triage",
             "healthpath-hospital-matcher",
             "healthpath-registration-fetcher",
+            "healthpath-doctor-schedule",
             "healthpath-itinerary-builder",
         ]:
             skill_dir = self.skills_dir / skill_name

@@ -31,6 +31,7 @@ skills/healthpath-hospital-matcher/blacklist.json
 skills/healthpath-registration-fetcher/hospital_info.json
 skills/healthpath-registration-fetcher/data_corrections.json
 skills/healthpath-itinerary-builder/user_history.json
+skills/healthpath-doctor-schedule/schedule_cache.json
 
 # IDE
 .vscode/
