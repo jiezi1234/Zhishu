@@ -8,6 +8,7 @@
 
 - **一句话输入**：用户只需描述就医需求，系统自动完成全流程
 - **跨医院比选**：自动搜索多家医院，综合评估距离、时间、费用、排队等因素
+- **指名医生直查**：用户指明"挂某医院某医生的号",系统驱动 AutoClaw 浏览器访问挂号官网,读取医生出诊表与实时号源,按评分推荐合适就诊时段
 - **智能推荐**：基于用户偏好（距离优先/时间优先/费用优先）生成 Top-N 方案
 - **多格式输出**：支持生成大字版 PDF（老年友好），完美覆盖流程展现
 - **医旅一体化**：支持异地就医场景，整合交通、住宿等信息
@@ -16,19 +17,21 @@
 
 ```
 Zhishu-Agent/
-├── skills/                    # 5 个核心 Skill + 1 个底层地图 Skill
-│   ├── healthpath-intent-understanding/   # 意图结构化
+├── skills/                    # 6 个核心 Skill + 1 个底层地图 Skill
+│   ├── healthpath-intent-understanding/   # 意图结构化(含 doctor_name 抽取)
 │   ├── healthpath-symptom-triage/         # 症状分诊与科室推荐
 │   ├── healthpath-hospital-matcher/       # 医院匹配
 │   ├── healthpath-registration-fetcher/   # 挂号链接采集
+│   ├── healthpath-doctor-schedule/        # 医生出诊表/号源抓取与推荐(浏览器控制)
 │   ├── healthpath-itinerary-builder/      # 路线规划与 PDF 生成
 │   └── baidu-ai-map/                      # 地图底层能力
 ├── data/
 │   └── mock/                  # 模拟数据（医院库、号源库）
 ├── tests/
 │   └── test_integration.py    # 端到端集成测试
-├── _generated/                # 生成的输出文件
-└── docs/                      # 文档
+├── docs/
+│   └── superpowers/           # 设计文档 / 实施计划
+└── output/                    # 生成的 PDF 输出
 ```
 
 ## 快速开始
@@ -51,6 +54,7 @@ C:\Users\Administrator\.openclaw-autoclaw\skills\
 ├── healthpath-intent-understanding/
 ├── healthpath-hospital-matcher/
 ├── healthpath-registration-fetcher/
+├── healthpath-doctor-schedule/
 └── healthpath-itinerary-builder/
 ```
 
@@ -86,11 +90,11 @@ cd project
 python tests/test_integration.py
 ```
 
-## 5 个核心 Skill
+## 6 个核心 Skill
 
 ### Skill 1: healthpath-intent-understanding（意图结构化）
 
-**功能**：解析用户自然语言输入，提取结构化参数
+**功能**：解析用户自然语言输入，提取结构化参数(含 `doctor_name`,支持"挂某医生的号"语义)
 
 **输入**：用户一句话描述
 
@@ -104,6 +108,7 @@ python tests/test_integration.py
 {
   "symptom": "腰疼",
   "department": "骨科",
+  "doctor_name": "",
   "target_city": "北京",
   "time_window": "this_week",
   "output_format": "large_font_pdf",
@@ -123,9 +128,19 @@ python tests/test_integration.py
 
 **功能**：查询缓存并解析医院官网，返回可用挂号入口信息。
 
-### Skill 5: healthpath-itinerary-builder（路线与行程单）
+### Skill 5: healthpath-doctor-schedule（医生出诊表 / 号源推荐）
 
-**功能**：规划路线并生成最终 PDF 行程单（默认终态输出）。
+**功能**：通过 AutoClaw 浏览器控制(`autoclaw task="..."`) 访问挂号官网:
+- 用户指名医生 → 抓该医生出诊表 + 未来 14 天号源 + 按评分推荐就诊时段
+- 用户未指名医生 → 抓该科室专家列表供用户选择
+- 遇登录/验证码 → 透传 `session_id`/`tab_id`,用户在本机浏览器完成后恢复
+- 出诊表 7 天缓存,号源实时抓取
+
+**降级**:autoclaw 不可用时整个 Step 5 静默跳过,流程不中断,仍生成 PDF(只是没有具体推荐时段)。
+
+### Skill 6: healthpath-itinerary-builder（路线与行程单）
+
+**功能**：规划路线并生成最终 PDF 行程单（默认终态输出,含医生与推荐就诊时段信息）。
 
 ## 典型使用场景
 
@@ -166,6 +181,20 @@ python tests/test_integration.py
 - 交通方案和住宿建议
 - 行程提醒
 
+### 场景 D:指名医生预约(新)
+
+**在 AutoClaw 中输入:**
+```
+我要挂北京协和医院神经内科王立凡医生的号。
+```
+
+**AutoClaw 返回:**
+- 系统识别"王立凡"为指定医生
+- 驱动浏览器访问协和官网,抓取王立凡近 14 天排班与剩余号源
+- 按"号源充足度 + 时效贴近 + 时间偏好"评分,推荐具体日期+上/下午
+- 用户确认推荐时段后,生成含医生姓名/职称/擅长/推荐时段的 PDF 行程单
+- 遇登录时浏览器窗口保持打开,用户完成登录后系统自动恢复
+
 ## 运行演示
 
 python demo/demo.py
@@ -196,6 +225,7 @@ C:\Users\Administrator\.openclaw-autoclaw\openclaw.json
       "healthpath-intent-understanding",
       "healthpath-hospital-matcher",
       "healthpath-registration-fetcher",
+      "healthpath-doctor-schedule",
       "healthpath-itinerary-builder"
     ]
   },
@@ -232,12 +262,14 @@ cat docs/USAGE_GUIDE.md
 
 **第 1 阶段（完成）**：项目框架搭建 + 本地数据验证
 **第 2 阶段（完成）**：多 Agent 长链路协同打通与大字版 PDF 排版优化
-**第 3 阶段（当前）**：演示脚本固化 + 答辩文档准备
+**第 3 阶段（完成）**：AutoClaw 浏览器控制集成 — 医生出诊表/号源实时查询与推荐
+**第 4 阶段（当前）**：演示脚本固化 + 答辩文档准备
 
 ## 技术栈
 
-- **框架**：AutoClaw（智能体执行框架）
+- **框架**：AutoClaw（智能体执行框架,含 autoglm-browser-agent 浏览器控制)
 - **LLM**：DeepSeek API（意图理解）
+- **语义匹配**: sentence-transformers(症状/科室映射)
 - **数据处理**：Python + JSON
 - **文档生成**：reportlab（大字版 PDF）
 

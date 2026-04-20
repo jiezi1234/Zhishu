@@ -20,6 +20,10 @@
       "description": "获取医院官网/挂号链接信息"
     },
     {
+      "name": "healthpath-doctor-schedule",
+      "description": "通过 AutoClaw 浏览器控制抓取医生出诊表与实时号源,按评分推荐就诊时段"
+    },
+    {
       "name": "healthpath-itinerary-builder",
       "description": "规划路线并生成就医行程单 PDF"
     },
@@ -30,11 +34,12 @@
   ],
   "workflow": {
     "steps": [
-      {"step": 1, "skill": "healthpath-intent-understanding", "description": "意图结构化"},
+      {"step": 1, "skill": "healthpath-intent-understanding", "description": "意图结构化(含 doctor_name 抽取)"},
       {"step": 2, "skill": "healthpath-symptom-triage", "description": "症状分诊（可跳过）"},
       {"step": 3, "skill": "healthpath-hospital-matcher", "description": "医院候选匹配"},
       {"step": 4, "skill": "healthpath-registration-fetcher", "description": "挂号链接采集"},
-      {"step": 5, "skill": "healthpath-itinerary-builder", "description": "路线规划与 PDF 生成"}
+      {"step": 5, "skill": "healthpath-doctor-schedule", "description": "医生出诊表+号源抓取与推荐"},
+      {"step": 6, "skill": "healthpath-itinerary-builder", "description": "路线规划与 PDF 生成"}
     ]
   }
 }

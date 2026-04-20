@@ -11,6 +11,8 @@
     "症状分诊",
     "医院匹配",
     "挂号链接采集",
+    "医生出诊表与号源查询(浏览器控制)",
+    "就诊时段推荐",
     "路线规划",
     "PDF文档生成"
   ],
@@ -20,6 +22,31 @@
       "user_input": {
         "type": "string",
         "description": "用户的自然语言输入，描述医疗就诊需求"
+      },
+      "selected_hospital": {
+        "type": "string",
+        "description": "用户从候选中选定的医院名(多轮交互时传入)"
+      },
+      "selected_doctor": {
+        "type": "string",
+        "description": "用户指定的医生姓名(多轮交互时传入;不传则由 intent 从 user_input 抽取)"
+      },
+      "browser_resume": {
+        "type": "object",
+        "description": "浏览器中断恢复参数 {session_id, tab_id, user_action}",
+        "properties": {
+          "session_id": {"type": "string"},
+          "tab_id": {"type": "string"},
+          "user_action": {"type": "string", "description": "login_done/captcha_done/approve/reject/自由文本"}
+        }
+      },
+      "confirmed_appointment": {
+        "type": "object",
+        "description": "用户确认的就诊时间 {date, time_slot},确认后流程继续到 Step 6 生成 PDF",
+        "properties": {
+          "date": {"type": "string", "description": "ISO 日期,如 2026-04-22"},
+          "time_slot": {"type": "string", "description": "上午|下午|HH:MM-HH:MM"}
+        }
       },
       "output_format": {
         "type": "string",
@@ -40,6 +67,11 @@
           "need_more_info",
           "need_location",
           "awaiting_hospital_selection",
+          "awaiting_doctor_selection",
+          "awaiting_browser_interaction",
+          "doctor_schedule_fetched",
+          "doctor_not_found",
+          "schedule_fetched_but_full",
           "emergency_warning",
           "no_hospitals_found",
           "error"
@@ -56,6 +88,7 @@
     "healthpath-symptom-triage",
     "healthpath-hospital-matcher",
     "healthpath-registration-fetcher",
+    "healthpath-doctor-schedule",
     "healthpath-itinerary-builder",
     "baidu-ai-map"
   ],
