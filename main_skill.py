@@ -1,12 +1,13 @@
 """
 main_skill.py — 智枢——基于长链路协同的全人群医旅调度智能体 主入口
 
-统一 5 步流程：
+统一 6 步流程：
   1) healthpath-intent-understanding
   2) healthpath-symptom-triage（用户已明确科室可跳过）
   3) healthpath-hospital-matcher
   4) healthpath-registration-fetcher
-  5) healthpath-itinerary-builder
+  5) healthpath-doctor-schedule（autoclaw 抓医生出诊表+号源,推荐就诊时段）
+  6) healthpath-itinerary-builder
 """
 
 import logging
@@ -26,6 +27,7 @@ for skill_dir in [
     "healthpath-symptom-triage",
     "healthpath-hospital-matcher",
     "healthpath-registration-fetcher",
+    "healthpath-doctor-schedule",
     "healthpath-itinerary-builder",
 ]:
     sys.path.insert(0, os.path.join(_ROOT, "skills", skill_dir))
@@ -34,6 +36,7 @@ from intent_parser import parse_intent
 from symptom_triage import triage
 from hospital_matcher import match
 from registration_fetcher import fetch
+import doctor_schedule as doctor_schedule_mod
 from itinerary_builder import build
 
 
@@ -47,6 +50,9 @@ class HealthPathAgent:
         user_input: str,
         user_location: Optional[str] = None,
         selected_hospital: Optional[str] = None,
+        selected_doctor: Optional[str] = None,
+        browser_resume: Optional[dict] = None,
+        confirmed_appointment: Optional[dict] = None,
         extra_answers: Optional[dict] = None,
         output_format: str = "large_font_pdf",
         user_profile: Optional[dict] = None,
@@ -146,15 +152,119 @@ class HealthPathAgent:
             )
             result["steps"]["registration"] = reg_result
 
-            # Step 5: 行程单生成
+            # Step 5: 医生出诊表 + 号源 + 推荐
+            doctor_name = (
+                selected_doctor
+                or (intent_result or {}).get("doctor_name", "")
+            )
+            registration_url = (
+                reg_result.get("registration_url")
+                or reg_result.get("official_url")
+                or ""
+            )
+            user_prefs_for_rec = {
+                "time_window": (intent_result or {}).get("time_window", ""),
+                "preferred_period": "",
+            }
+
+            doctor_step_result = None
+
+            if registration_url:
+                if doctor_name:
+                    doctor_step_result = doctor_schedule_mod.fetch_doctor_schedule(
+                        hospital_name=selected_hospital,
+                        doctor_name=doctor_name,
+                        registration_url=registration_url,
+                        user_preferences=user_prefs_for_rec,
+                        browser_resume=browser_resume,
+                    )
+                else:
+                    doctor_step_result = doctor_schedule_mod.list_experts(
+                        hospital_name=selected_hospital,
+                        department=departments[0],
+                        registration_url=registration_url,
+                        browser_resume=browser_resume,
+                    )
+
+            if doctor_step_result is not None:
+                result["steps"]["doctor_schedule"] = doctor_step_result
+                ds_status = doctor_step_result.get("status")
+
+                if ds_status == "awaiting_browser_interaction":
+                    result["status"] = "awaiting_browser_interaction"
+                    result["final_output"] = {
+                        "browser_session": doctor_step_result.get("browser_session"),
+                        "interact_prompt": doctor_step_result.get("interact_prompt", ""),
+                    }
+                    result["follow_up"] = [{
+                        "id": "browser_interaction",
+                        "question": doctor_step_result.get("interact_prompt", "")
+                                    or "浏览器窗口里有一个待操作项,请完成后告诉我继续",
+                    }]
+                    return result
+
+                if ds_status == "success" and "experts" in doctor_step_result:
+                    result["status"] = "awaiting_doctor_selection"
+                    result["final_output"] = {
+                        "experts": doctor_step_result["experts"],
+                        "message": "以下是该科室出诊专家,请告诉我选择哪一位:",
+                    }
+                    return result
+
+                if ds_status == "schedule_fetched_but_full":
+                    result["status"] = "schedule_fetched_but_full"
+                    result["warning"] = doctor_step_result.get("warning", "")
+
+                if ds_status == "doctor_not_found":
+                    result["status"] = "doctor_not_found"
+                    result["follow_up"] = [{
+                        "id": "doctor_name_clarify",
+                        "question": doctor_step_result.get("error", "未找到该医生,请确认姓名"),
+                    }]
+                    return result
+
+                if (ds_status == "success"
+                        and doctor_step_result.get("schedule") is not None
+                        and not confirmed_appointment):
+                    result["status"] = "doctor_schedule_fetched"
+                    result["final_output"] = {
+                        "schedule": doctor_step_result.get("schedule"),
+                        "recommendation": doctor_step_result.get("recommendation"),
+                        "alternatives": doctor_step_result.get("alternatives", []),
+                        "message": "已获取医生出诊表与号源,请确认推荐的就诊时间或选择备选",
+                    }
+                    return result
+
+            # Step 6: 行程单生成
+            appointment_time = None
+            if confirmed_appointment:
+                date_s = confirmed_appointment.get("date", "")
+                slot_s = confirmed_appointment.get("time_slot", "")
+                if date_s and slot_s:
+                    time_map = {"上午": "09:00", "下午": "14:00"}
+                    hhmm = time_map.get(slot_s, slot_s)
+                    appointment_time = f"{date_s} {hhmm}"
+
+            doctor_ctx = None
+            if doctor_step_result and doctor_step_result.get("status") in (
+                "success", "schedule_fetched_but_full"
+            ):
+                doctor_ctx = {
+                    "doctor": (doctor_step_result.get("schedule") or {}).get("doctor"),
+                    "recommendation": doctor_step_result.get("recommendation"),
+                    "warning": doctor_step_result.get("warning"),
+                }
+
             itinerary_result = build(
                 user_location=user_location,
                 hospital_name=selected_hospital,
                 hospital_address=hospital_info.get("address", ""),
                 department=departments[0],
                 registration_info=reg_result,
+                appointment_time=appointment_time,
                 output_format=output_format,
                 user_profile=user_profile,
+                doctor_schedule=doctor_ctx,
             )
             result["steps"]["itinerary"] = itinerary_result
             result["final_output"] = {
@@ -162,6 +272,8 @@ class HealthPathAgent:
                 "depart_time": itinerary_result.get("depart_time", ""),
                 "route": itinerary_result.get("route_summary", {}),
                 "registration_url": reg_result.get("registration_url", ""),
+                "doctor": (doctor_ctx or {}).get("doctor"),
+                "recommendation": (doctor_ctx or {}).get("recommendation"),
             }
             return result
 
@@ -184,6 +296,7 @@ class HealthPathAgent:
                 "healthpath-symptom-triage",
                 "healthpath-hospital-matcher",
                 "healthpath-registration-fetcher",
+                "healthpath-doctor-schedule",
                 "healthpath-itinerary-builder",
                 "baidu-ai-map（底层地图能力）",
             ],
