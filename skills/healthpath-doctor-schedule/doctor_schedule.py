@@ -98,6 +98,104 @@ def list_experts(
 _TITLE_RE = r"(主任医师|副主任医师|主治医师|医师)"
 
 
+def fetch_doctor_schedule(
+    hospital_name: str,
+    doctor_name: str,
+    registration_url: str,
+    user_preferences: Optional[dict] = None,
+    browser_resume: Optional[dict] = None,
+) -> dict:
+    if not hospital_name:
+        return _err("schedule", "hospital_name 为空")
+    if not doctor_name:
+        return _err("schedule", "doctor_name 为空")
+    if not registration_url:
+        return _err("schedule", "registration_url 为空,请先调用 registration-fetcher")
+
+    cached = _load_cache(hospital_name, doctor_name)
+
+    task = TASK_FETCH_SCHEDULE.format(
+        registration_url=registration_url, doctor_name=doctor_name)
+
+    sid = tid = None
+    if browser_resume:
+        sid = browser_resume.get("session_id")
+        tid = browser_resume.get("tab_id")
+        task = _resume_prefix(browser_resume, hospital_name) + task
+
+    driver = run_browser_task(
+        task=task,
+        start_url=registration_url if not sid else None,
+        session_id=sid, tab_id=tid,
+    )
+
+    if driver["status"] in ("not_available", "timeout", "error"):
+        return _err("schedule", driver.get("error") or "autoclaw 不可用")
+
+    if driver["status"] == "interact_required":
+        return {
+            "status": "awaiting_browser_interaction",
+            "schedule": None,
+            "recommendation": None,
+            "warning": None,
+            "error": None,
+            "browser_session": {
+                "session_id": driver["session_id"],
+                "tab_id": driver["tab_id"],
+            },
+            "interact_prompt": driver.get("interact_prompt", ""),
+        }
+
+    obs = driver["observation"]
+    doctor_meta = _parse_doctor_meta(obs, doctor_name)
+    if doctor_meta is None:
+        return {
+            "status": "doctor_not_found",
+            "schedule": None,
+            "recommendation": None,
+            "warning": None,
+            "error": f"在当前页面未找到医生'{doctor_name}',请确认姓名是否正确或改走专家列表分支",
+        }
+
+    weekly_pattern = _parse_weekly_pattern(obs)
+    slots = _parse_slots(obs)
+
+    from_cache_pattern = False
+    if not weekly_pattern and cached:
+        weekly_pattern = cached.get("weekly_pattern", [])
+        from_cache_pattern = True
+    elif weekly_pattern:
+        _save_cache(hospital_name, doctor_name, doctor_meta, weekly_pattern)
+
+    rec = recommend(slots, user_preferences=user_preferences)
+
+    schedule = {
+        "doctor": doctor_meta,
+        "weekly_pattern": weekly_pattern,
+        "slots": slots,
+        "data_timestamp": datetime.now().isoformat(),
+        "from_cache": {"weekly_pattern": from_cache_pattern, "slots": False},
+    }
+
+    if rec["recommendation"] is None:
+        return {
+            "status": "schedule_fetched_but_full",
+            "schedule": schedule,
+            "recommendation": None,
+            "warning": rec["warning"],
+            "error": None,
+        }
+
+    return {
+        "status": "success",
+        "schedule": schedule,
+        "recommendation": rec["recommendation"],
+        "alternatives": rec["alternatives"],
+        "warning": None,
+        "error": None,
+    }
+
+
 def _parse_experts(md: str) -> list:
     """
     从自由文本抽取专家。接受类似:
@@ -126,6 +224,99 @@ def _parse_experts(md: str) -> list:
         if len(experts) >= 10:
             break
     return experts
+
+
+# ── 恢复前缀 ─────────────────────────────────────────────────────
+
+def _parse_doctor_meta(md: str, doctor_name: str) -> Optional[dict]:
+    if doctor_name not in md:
+        return None
+    title_m = re.search(
+        rf"{re.escape(doctor_name)}\s*[,、\|:： \t]*{_TITLE_RE}", md)
+    title = title_m.group(1) if title_m else "医师"
+    spec_m = re.search(
+        rf"{re.escape(doctor_name)}[\s\S]{{0,80}}?(?:擅长|专长)[::]\s*([^\n]+)",
+        md)
+    specialty = spec_m.group(1).strip()[:80] if spec_m else ""
+    return {"name": doctor_name, "title": title, "specialty": specialty}
+
+
+def _parse_weekly_pattern(md: str) -> list:
+    pattern = []
+    wk = re.compile(
+        r"(周[一二三四五六日])\s*(上午|下午)\s*[:： ]?\s*([^\n,。;;]{0,20})"
+    )
+    for m in wk.finditer(md):
+        pattern.append({
+            "weekday": f"{m.group(1)}{m.group(2)}",
+            "shift": m.group(3).strip() or "门诊",
+        })
+    return pattern
+
+
+def _parse_slots(md: str) -> list:
+    slots = []
+    slot_re = re.compile(
+        r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[-/]\d{1,2})"
+        r"\s*[\|\s,]+\s*(上午|下午|全天)"
+        r"\s*[\|\s,]+\s*(\d+)\s*[/／]\s*(\d+)"
+    )
+    for m in slot_re.finditer(md):
+        d = m.group(1)
+        if "-" in d and len(d.split("-")) == 2:
+            d = f"{datetime.now().year}-{d}"
+        elif "/" in d and len(d.split("/")) == 2:
+            parts = d.split("/")
+            d = f"{datetime.now().year}-{parts[0]}-{parts[1]}"
+        slots.append({
+            "date": d,
+            "period": m.group(2),
+            "remaining": int(m.group(3)),
+            "total": int(m.group(4)),
+        })
+    return slots
+
+
+# ── 缓存 ─────────────────────────────────────────────────────────
+
+def _load_cache(hospital_name: str, doctor_name: str) -> Optional[dict]:
+    if not os.path.exists(CACHE_PATH):
+        return None
+    try:
+        with open(CACHE_PATH, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+    except Exception:
+        return None
+    entry = cache.get(f"{hospital_name}::{doctor_name}")
+    if not entry:
+        return None
+    try:
+        cached_at = datetime.fromisoformat(entry.get("weekly_pattern_cached_at", ""))
+    except Exception:
+        return None
+    if datetime.now() - cached_at > timedelta(days=CACHE_TTL_DAYS):
+        return None
+    return entry
+
+
+def _save_cache(hospital_name: str, doctor_name: str,
+                doctor_meta: dict, weekly_pattern: list) -> None:
+    cache = {}
+    if os.path.exists(CACHE_PATH):
+        try:
+            with open(CACHE_PATH, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+    cache[f"{hospital_name}::{doctor_name}"] = {
+        "doctor_meta": doctor_meta,
+        "weekly_pattern": weekly_pattern,
+        "weekly_pattern_cached_at": datetime.now().isoformat(),
+        "weekly_pattern_ttl_days": CACHE_TTL_DAYS,
+    }
+    os.makedirs(os.path.dirname(CACHE_PATH), exist_ok=True)
+    with open(CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 # ── 恢复前缀 ─────────────────────────────────────────────────────
