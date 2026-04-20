@@ -7,6 +7,8 @@ import types
 # 返回 [] 即走规则兜底,对本测试无影响。
 _fake_sm = types.ModuleType("semantic_matcher")
 _fake_sm.search_knowledge = lambda text, k=1: []
+_fake_sm.detect_emergency = lambda text: []
+_fake_sm.normalize_symptoms = lambda text: text
 sys.modules.setdefault("semantic_matcher", _fake_sm)
 
 sys.path.insert(0, os.path.join(
