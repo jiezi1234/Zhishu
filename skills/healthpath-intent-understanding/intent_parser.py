@@ -30,6 +30,7 @@ def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
         task = client.extract_intent(user_input)
         if task:
             task.setdefault("timestamp", datetime.now().isoformat())
+            task.setdefault("doctor_name", extract_doctor_name(user_input))
             return task
 
     # 本地解析：symptom / department 走语义，其余走规则
@@ -38,6 +39,7 @@ def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
     task = {
         "symptom":              symptom,
         "department":           department,
+        "doctor_name":          extract_doctor_name(user_input),
         "target_city":          "北京",
         "time_window":          extract_time_window(user_input),
         "budget":               extract_budget(user_input),
@@ -183,6 +185,60 @@ def extract_special_requirements(text: str) -> str:
     if "医保" in text:
         reqs.append("medical_insurance")
     return ",".join(reqs)
+
+
+# ── 医生姓名抽取(规则式) ─────────────────────────────────────────
+
+_DOCTOR_STOPWORDS = {
+    "我", "您", "他", "她", "医生", "大夫", "专家", "某某", "主任",
+    "主任医师", "副主任医师", "主治医师", "医师",
+}
+
+_NAME_INVALID_START = {
+    # 机构/地点后缀字(不会作姓氏首字)
+    "院", "楼", "室", "科", "厅", "部", "所", "医", "街", "区", "村", "镇", "县", "市",
+    # 方位
+    "东", "南", "西", "北", "中", "上", "下", "前", "后", "内", "外",
+    # 虚词
+    "的", "了", "是", "有", "和", "与", "在", "就", "也", "这", "那",
+    # 动词
+    "挂", "找", "去", "到", "请", "给", "让", "帮", "能", "想", "要",
+    # 人称
+    "你", "我", "他", "她", "们",
+}
+
+
+def extract_doctor_name(text: str) -> str:
+    """
+    从用户文本抽取医生姓名(规则式)。
+
+    策略:扫描 "医生/大夫/主任医师/副主任医师/主任" 等触发词,
+    向前按 4→3→2 字长尝试取候选姓名,过滤停用词、含'医院/科'的词,
+    以及常见非姓氏起始字(如'院''挂''的')。
+    """
+    triggers = ["主任医师", "副主任医师", "医生", "大夫", "主任"]
+    for trigger in triggers:
+        pos = 0
+        while True:
+            idx = text.find(trigger, pos)
+            if idx < 0:
+                break
+            for length in (4, 3, 2):
+                start = idx - length
+                if start < 0:
+                    continue
+                candidate = text[start:idx]
+                if not all("\u4e00" <= c <= "\u9fa5" for c in candidate):
+                    continue
+                if candidate in _DOCTOR_STOPWORDS:
+                    continue
+                if "医院" in candidate or "科" in candidate:
+                    continue
+                if candidate[0] in _NAME_INVALID_START:
+                    continue
+                return candidate
+            pos = idx + len(trigger)
+    return ""
 
 
 if __name__ == "__main__":
