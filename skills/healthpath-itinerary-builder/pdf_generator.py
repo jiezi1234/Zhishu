@@ -247,7 +247,7 @@ class InfoCardFlowable(CardFlowable):
     def _draw_content(self, card_w: float, card_h: float):
         if not self._rows:
             return
-        title_y  = self._draw_title("🏥  就诊信息", card_h)
+        title_y  = self._draw_title("就诊信息", card_h)
         x_label  = self._x0()
         x_value  = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
@@ -337,7 +337,7 @@ class RouteCardFlowable(CardFlowable):
     def _draw_content(self, card_w: float, card_h: float):
         if not self._rows:
             return
-        title_y    = self._draw_title("🚗  路线规划", card_h)
+        title_y    = self._draw_title("路线规划", card_h)
         x_label    = self._x0()
         x_value    = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
@@ -431,7 +431,7 @@ class RegistrationCardFlowable(CardFlowable):
     def _draw_content(self, card_w: float, card_h: float):
         if not self._rows:
             return
-        title_y = self._draw_title("🔗  挂号信息", card_h)
+        title_y = self._draw_title("挂号信息", card_h)
         x_label = self._x0()
         x_value = x_label + 68
         divider_x2 = card_w - CARD_PADDING_H
@@ -472,43 +472,43 @@ class RegistrationGuideCardFlowable(CardFlowable):
     # 主流挂号平台模板 — 按平台名的关键字匹配
     _PLATFORM_GUIDES = {
         "京医通": [
-            "📱 方式一:微信搜索「京医通」公众号 → 挂号 → 选择 {hospital_name}",
+            "【线上】微信搜索「京医通」公众号 → 挂号 → 选择 {hospital_name}",
             "      → 选科室 → 选医生/时段 → 实名注册 → 绑定医保卡 → 支付",
-            "🏥 方式二:现场京医通自助机(院内 1F 大厅)→ 刷身份证 → 按屏幕选号",
-            "💡 京医通提前 7 天放号,热门专家建议 00:00 整点守号",
+            "【现场】京医通自助机(院内 1F 大厅)→ 刷身份证 → 按屏幕选号",
+            "【提示】京医通提前 7 天放号,热门专家建议 00:00 整点守号",
         ],
         "114": [
-            "📱 方式一:微信搜索「114 挂号」小程序 → 搜 {hospital_name}",
+            "【线上】微信搜索「114 挂号」小程序 → 搜 {hospital_name}",
             "      → 选科室 → 选专家 → 选日期时段 → 实名注册 → 支付",
-            "☎️ 方式二:拨打 114 电话转 1 号 → 说医院/科室/医生 → 按语音提示",
-            "💡 114 通常提前 7-14 天放号,退号可在就诊前一天 15:00 前",
+            "【电话】拨打 114 电话转 1 号 → 说医院/科室/医生 → 按语音提示",
+            "【提示】114 通常提前 7-14 天放号,退号可在就诊前一天 15:00 前",
         ],
         "好大夫在线": [
-            "📱 打开好大夫 APP 或 haodf.com → 搜索医生姓名",
+            "【线上】打开好大夫 APP 或 haodf.com → 搜索医生姓名",
             "      → 查医生主页「预约加号」/「图文问诊」",
-            "🏥 线下预约仍需到院挂号,好大夫主要做医生筛选和图文咨询",
-            "💡 好大夫的「专家门诊预约」实质是医生代为在医院系统抢号,需额外服务费",
+            "【现场】线下预约仍需到院挂号,好大夫主要做医生筛选和图文咨询",
+            "【提示】「专家门诊预约」实质是医生代为在医院系统抢号,需额外服务费",
         ],
         "健康广东": [
-            "📱 微信搜索「健康广东」小程序 → 医院预约 → 选 {hospital_name}",
+            "【线上】微信搜索「健康广东」小程序 → 医院预约 → 选 {hospital_name}",
             "      → 选科室 → 选医生 → 选时段 → 实名注册 → 支付",
-            "🏥 现场挂号窗口:出示身份证 + 医保卡即可",
-            "💡 健康广东覆盖广东全省三甲,支持家人代预约",
+            "【现场】挂号窗口:出示身份证 + 医保卡即可",
+            "【提示】健康广东覆盖广东全省三甲,支持家人代预约",
         ],
         "微医": [
-            "📱 微信搜索「微医」小程序或 APP → 搜 {hospital_name} → 选科室",
+            "【线上】微信搜索「微医」小程序或 APP → 搜 {hospital_name} → 选科室",
             "      → 选医生 → 选日期/时段 → 实名注册 + 支付",
-            "💡 微医也支持专家在线视频问诊,可先问诊后决定是否到院",
+            "【提示】微医也支持专家在线视频问诊,可先问诊后决定是否到院",
         ],
     }
 
     # 通用兜底 — 未识别的平台
     _GENERIC_GUIDE = [
-        "📱 线上挂号:打开上方链接 → 注册登录(输入身份证号实名)",
+        "【线上】打开上方链接 → 注册登录(输入身份证号实名)",
         "      → 搜科室或医生 → 选日期时段 → 支付确认",
-        "🏥 现场挂号:带身份证+医保卡 → 大厅挂号窗口或自助机",
+        "【现场】带身份证+医保卡 → 大厅挂号窗口或自助机",
         "      → 报科室/医生 → 取号缴费",
-        "💡 建议提前 1-3 天预约,热门专家号需提前 7 天",
+        "【提示】建议提前 1-3 天预约,热门专家号需提前 7 天",
     ]
 
     def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
@@ -549,9 +549,9 @@ class RegistrationGuideCardFlowable(CardFlowable):
             return self._GENERIC_GUIDE
         # 连 URL 都没有 → 最简兜底
         return [
-            "📱 微信搜「京医通」/「114 挂号」小程序 → 搜医院 → 预约",
-            "🏥 现场挂号:带身份证+医保卡 → 大厅窗口 / 自助机",
-            "☎️ 电话预约:拨打医院总机查询(官网可查)",
+            "【线上】微信搜「京医通」/「114 挂号」小程序 → 搜医院 → 预约",
+            "【现场】带身份证+医保卡 → 大厅窗口 / 自助机",
+            "【电话】拨打医院总机查询(官网可查)",
         ]
 
     def _wrap_text(self, text: str, max_width: float) -> list:
@@ -588,7 +588,7 @@ class RegistrationGuideCardFlowable(CardFlowable):
 
     def _draw_content(self, card_w: float, card_h: float):
         if not self._guide_steps: return
-        title_y = self._draw_title("🧭  挂号指导", card_h)
+        title_y = self._draw_title("挂号指导", card_h)
         x0      = self._x0()
         max_width = card_w - x0 - CARD_PADDING_H
         y = title_y - 6
@@ -599,7 +599,7 @@ class RegistrationGuideCardFlowable(CardFlowable):
             
             self.canv.saveState()
             # 首行如果是标题带 emoji 的可以加粗着色
-            if step.startswith(('📱', '🏥', '☎️')):
+            if step.startswith(('【线上】', '【现场】', '【电话】', '【提示】')):
                 self.canv.setFillColor(COLORS['text'])
                 self.canv.setFont(self.font_name, self.fs.body)
             else:
@@ -618,7 +618,7 @@ class RegistrationGuideCardFlowable(CardFlowable):
 class NavStepsCardFlowable(CardFlowable):
     """院内导引步骤卡片，每步一行，支持自动换行。"""
 
-    def __init__(self, nav_steps: list, font_name: str, fs: FontSizes, title: str = "📋  就医方案"):
+    def __init__(self, nav_steps: list, font_name: str, fs: FontSizes, title: str = "就医方案"):
         super().__init__(font_name, fs)
         self.nav_steps = nav_steps or ['请按医院指示牌前往对应科室。']
         self._row_h = fs.body + 9
@@ -704,7 +704,7 @@ class ChecklistCardFlowable(CardFlowable):
         return self.fs.title + 8 + len(self.items) * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        title_y   = self._draw_title("🎒  出行清单", card_h)
+        title_y   = self._draw_title("出行清单", card_h)
         x0        = self._x0()
         max_chars = int((card_w - x0 - CARD_PADDING_H) / (self.fs.body * 0.62)) or 30
         y = title_y - 6
@@ -734,7 +734,7 @@ class TableCardFlowable(CardFlowable):
         return self.fs.title + 8 + self._num_rows * self._row_h
 
     def _draw_content(self, card_w: float, card_h: float):
-        self._draw_title("📊  医院对比", card_h)
+        self._draw_title("医院对比", card_h)
         title_h   = self.fs.title + 8
         x         = self._x0()
         table_w   = card_w - x - CARD_PADDING_H
