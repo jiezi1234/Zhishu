@@ -659,6 +659,7 @@ def _generate_pdf(hospital_name, hospital_address, department,
         "registration_url":     reg.get("registration_url", ""),
         "registration_platform": reg.get("registration_platform", ""),
         "booking_note":         reg.get("booking_note", ""),
+        "hospital_name":        hospital_name,
         "hospital_address":     hospital_address or "",
         # 院内导引
         "nav_steps":            nav_steps,

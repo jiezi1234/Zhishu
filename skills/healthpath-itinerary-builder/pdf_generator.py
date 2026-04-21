@@ -182,7 +182,7 @@ class CardFlowable(Flowable):
         w = self._avail_width
         h = self._content_height() + CARD_PADDING_V * 2
         draw_rounded_rect(self.canv, 0, 0, w, h, fill_color=COLORS['card_bg'])
-        draw_left_border(self.canv, 0, 0, h)
+        # 左竖条替换为标题左侧的小圆点(在 _draw_title 里画)
         self._draw_content(w, h)
 
     def _draw_content(self, card_w: float, card_h: float):
@@ -194,6 +194,12 @@ class CardFlowable(Flowable):
         self.canv.setFillColor(COLORS['primary'])
         y = card_h - CARD_PADDING_V - self.fs.title
         x = CARD_PADDING_H + CARD_LEFT_BORDER + 4
+        # 标题左侧画一个小圆点代替原来的整条竖色条
+        dot_r = 3
+        self.canv.circle(
+            x - 8, y + self.fs.title / 2 - 1, dot_r,
+            fill=1, stroke=0,
+        )
         self.canv.drawString(x, y, title)
         self.canv.restoreState()
         return y
@@ -460,26 +466,93 @@ class RegistrationCardFlowable(CardFlowable):
 
 
 class RegistrationGuideCardFlowable(CardFlowable):
-    """挂号指导步骤卡片"""
+    """挂号指导步骤卡片。按 registration_platform / URL 域名识别主流平台,
+    给出针对性指导。"""
+
+    # 主流挂号平台模板 — 按平台名的关键字匹配
+    _PLATFORM_GUIDES = {
+        "京医通": [
+            "📱 方式一:微信搜索「京医通」公众号 → 挂号 → 选择 {hospital_name}",
+            "      → 选科室 → 选医生/时段 → 实名注册 → 绑定医保卡 → 支付",
+            "🏥 方式二:现场京医通自助机(院内 1F 大厅)→ 刷身份证 → 按屏幕选号",
+            "💡 京医通提前 7 天放号,热门专家建议 00:00 整点守号",
+        ],
+        "114": [
+            "📱 方式一:微信搜索「114 挂号」小程序 → 搜 {hospital_name}",
+            "      → 选科室 → 选专家 → 选日期时段 → 实名注册 → 支付",
+            "☎️ 方式二:拨打 114 电话转 1 号 → 说医院/科室/医生 → 按语音提示",
+            "💡 114 通常提前 7-14 天放号,退号可在就诊前一天 15:00 前",
+        ],
+        "好大夫在线": [
+            "📱 打开好大夫 APP 或 haodf.com → 搜索医生姓名",
+            "      → 查医生主页「预约加号」/「图文问诊」",
+            "🏥 线下预约仍需到院挂号,好大夫主要做医生筛选和图文咨询",
+            "💡 好大夫的「专家门诊预约」实质是医生代为在医院系统抢号,需额外服务费",
+        ],
+        "健康广东": [
+            "📱 微信搜索「健康广东」小程序 → 医院预约 → 选 {hospital_name}",
+            "      → 选科室 → 选医生 → 选时段 → 实名注册 → 支付",
+            "🏥 现场挂号窗口:出示身份证 + 医保卡即可",
+            "💡 健康广东覆盖广东全省三甲,支持家人代预约",
+        ],
+        "微医": [
+            "📱 微信搜索「微医」小程序或 APP → 搜 {hospital_name} → 选科室",
+            "      → 选医生 → 选日期/时段 → 实名注册 + 支付",
+            "💡 微医也支持专家在线视频问诊,可先问诊后决定是否到院",
+        ],
+    }
+
+    # 通用兜底 — 未识别的平台
+    _GENERIC_GUIDE = [
+        "📱 线上挂号:打开上方链接 → 注册登录(输入身份证号实名)",
+        "      → 搜科室或医生 → 选日期时段 → 支付确认",
+        "🏥 现场挂号:带身份证+医保卡 → 大厅挂号窗口或自助机",
+        "      → 报科室/医生 → 取号缴费",
+        "💡 建议提前 1-3 天预约,热门专家号需提前 7 天",
+    ]
 
     def __init__(self, task_params: Dict, font_name: str, fs: FontSizes):
         super().__init__(font_name, fs)
         self.task_params = task_params
-        
-        reg_url = task_params.get('registration_url', '')
-        if reg_url:
-            self._guide_steps = [
-                "📱 线上挂号：打开上方链接 → 注册登录 → 选择科室医生 → 预约时间 → 支付",
-                "🏥 现场挂号：携带身份证医保卡 → 挂号窗口/自助机 → 告知科室",
-            ]
-        else:
-            self._guide_steps = [
-                "📱 线上挂号：微信搜索「京医通」或「健康广东」→ 搜索医院 → 预约",
-                "🏥 现场挂号：携带身份证医保卡 → 挂号窗口/自助机 → 告知科室",
-                "☎️ 电话预约：拨打医院预约电话（官网查询）→ 按提示选择",
-            ]
-            
+        self._guide_steps = self._build_guide(task_params)
         self._row_h = fs.body + 9
+
+    def _build_guide(self, tp: Dict) -> list:
+        """按平台名/URL 识别,返回针对性挂号指导步骤。"""
+        platform = (tp.get("registration_platform") or "").strip()
+        url = (tp.get("registration_url") or "").lower()
+        hospital_name = tp.get("hospital_name", "") or ""
+
+        # 关键字匹配 — 检查平台名和 URL 域名
+        key = None
+        for pname in self._PLATFORM_GUIDES:
+            if pname in platform:
+                key = pname
+                break
+        if not key:
+            if "bjguahao" in url or "京医通" in platform:
+                key = "京医通"
+            elif "114yygh" in url or "114" in platform:
+                key = "114"
+            elif "haodf" in url or "好大夫" in platform:
+                key = "好大夫在线"
+            elif "guahao.cn" in url or "健康广东" in platform:
+                key = "健康广东"
+            elif "wy.guahao" in url or "微医" in platform:
+                key = "微医"
+            # 医院官网 — platform 常含"官网"字样,无特殊 key,落入 generic
+        if key:
+            return [line.format(hospital_name=hospital_name)
+                    for line in self._PLATFORM_GUIDES[key]]
+        # 未识别 → 通用
+        if url:
+            return self._GENERIC_GUIDE
+        # 连 URL 都没有 → 最简兜底
+        return [
+            "📱 微信搜「京医通」/「114 挂号」小程序 → 搜医院 → 预约",
+            "🏥 现场挂号:带身份证+医保卡 → 大厅窗口 / 自助机",
+            "☎️ 电话预约:拨打医院总机查询(官网可查)",
+        ]
 
     def _wrap_text(self, text: str, max_width: float) -> list:
         from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -751,17 +824,10 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
             elements.append(reg_guide_card)
             elements.append(Spacer(1, CARD_SPACING))
 
-        # 卡片4：就医方案（院内导引） - 切分成小块防止被截断推到下一页
+        # 卡片4：就医方案（院内导引） - 整卡不强制切块,放不下时 CardFlowable.split 会让它整张推到下一页
         nav_steps = task_params.get('nav_steps', [])
-        if not nav_steps:
-            elements.append(NavStepsCardFlowable([], font_name, fs))
-            elements.append(Spacer(1, CARD_SPACING))
-        else:
-            step_chunks = [nav_steps[i:i + 6] for i in range(0, len(nav_steps), 6)]
-            for i, chunk in enumerate(step_chunks):
-                title = "📋  就医方案" if i == 0 else "📋  就医方案 (接上)"
-                elements.append(NavStepsCardFlowable(chunk, font_name, fs, title))
-                elements.append(Spacer(1, CARD_SPACING))
+        elements.append(NavStepsCardFlowable(nav_steps or [], font_name, fs))
+        elements.append(Spacer(1, CARD_SPACING))
 
         # 卡片5：出行清单（定制化）
         elements.append(ChecklistCardFlowable(task_params, font_name, fs))
