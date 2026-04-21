@@ -236,6 +236,18 @@ def test_execute_final_pdf_contains_doctor_when_confirmed(monkeypatch, tmp_path)
         ),
     )
 
+    # 捕获传给 pdf_generator 的 recommendations,验证 doctor 字段在推荐卡片里
+    captured = {}
+    import pdf_generator as _pg
+    orig = _pg.generate_pdf_document
+
+    def _spy(recs, task_params, filepath, large_font=False):
+        captured["recs"] = recs
+        captured["task_params"] = task_params
+        return orig(recs, task_params, filepath, large_font=large_font)
+
+    monkeypatch.setattr(_pg, "generate_pdf_document", _spy)
+
     out_dir = str(tmp_path / "out")
     os.makedirs(out_dir, exist_ok=True)
     itinerary_builder.OUTPUT_DIR = out_dir
@@ -252,6 +264,57 @@ def test_execute_final_pdf_contains_doctor_when_confirmed(monkeypatch, tmp_path)
     pdf_path = result["final_output"]["pdf_path"]
     assert os.path.exists(pdf_path)
     assert result["final_output"]["doctor"]["name"] == "王立凡"
+    # 核心断言:PDF 推荐卡片里应有医生信息(不是空/dash)
+    r0 = captured["recs"][0]
+    assert r0["doctor_name"] == "王立凡"
+    assert r0["doctor_title"] == "主任医师"
+    assert r0["appointment_time"].startswith("2026-04-22")
+
+
+def test_execute_selected_doctor_from_expert_list_shows_in_pdf(monkeypatch, tmp_path):
+    """用户未指名医生 → 列表选 → 再次 execute 传 selected_doctor + confirmed_appointment →
+    PDF 推荐卡片应显示用户选定的医生。"""
+    _install_upstream_stubs(monkeypatch, "")
+    monkeypatch.setattr(doctor_schedule, "CACHE_PATH", str(tmp_path / "cache.json"))
+    monkeypatch.setattr(
+        doctor_schedule,
+        "run_browser_task",
+        lambda **kw: _stub_driver(
+            "李晓红 副主任医师\n"
+            "擅长:癫痫\n"
+            "2026-04-23|下午|8/20\n"
+        ),
+    )
+
+    captured = {}
+    import pdf_generator as _pg
+    orig = _pg.generate_pdf_document
+
+    def _spy(recs, task_params, filepath, large_font=False):
+        captured["recs"] = recs
+        return orig(recs, task_params, filepath, large_font=large_font)
+
+    monkeypatch.setattr(_pg, "generate_pdf_document", _spy)
+
+    out_dir = str(tmp_path / "out")
+    os.makedirs(out_dir, exist_ok=True)
+    itinerary_builder.OUTPUT_DIR = out_dir
+
+    # user_input 里不含医生名,但显式传 selected_doctor(模拟用户从列表里选了李晓红)
+    result = execute(
+        user_input="帮我找北京大学第三医院神经内科",
+        user_location="北京市海淀区",
+        selected_hospital="北京大学第三医院",
+        selected_doctor="李晓红",
+        confirmed_appointment={"date": "2026-04-23", "time_slot": "下午"},
+        output_format="pdf",
+        user_profile={"age_group": "adult"},
+    )
+    assert result["status"] == "success"
+    r0 = captured["recs"][0]
+    assert r0["doctor_name"] == "李晓红"
+    assert r0["doctor_title"] == "副主任医师"
+    assert "癫痫" in r0["doctor_specialty"]
 
 
 def test_execute_autoclaw_unavailable_still_generates_pdf(monkeypatch, tmp_path):

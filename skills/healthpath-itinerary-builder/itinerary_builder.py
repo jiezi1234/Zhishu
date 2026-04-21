@@ -616,22 +616,33 @@ def _generate_pdf(hospital_name, hospital_address, department,
     large_font = (output_format == "large_font_pdf")
 
     reg = registration_info or {}
+    ds = doctor_schedule or {}
+    ds_doctor = ds.get("doctor") or {}
+    ds_rec = ds.get("recommendation") or {}
+
+    # doctor_schedule 优先,否则从 registration_info 兜底
+    rec_doctor_name  = ds_doctor.get("name")  or reg.get("doctor_name", "")
+    rec_doctor_title = ds_doctor.get("title") or reg.get("doctor_title", "")
+
+    # 就诊时间:优先用显式 appointment_time;缺省时用推荐的 date+period
+    rec_appointment = appointment_time or ""
+    if not rec_appointment and ds_rec.get("date"):
+        rec_appointment = f"{ds_rec['date']} {ds_rec.get('period', '')}".strip()
+
     recommendations = [{
         "rank":                 1,
         "hospital_name":        hospital_name,
-        "doctor_name":          reg.get("doctor_name", ""),
-        "doctor_title":         reg.get("doctor_title", ""),
-        "appointment_time":     appointment_time or "",
+        "doctor_name":          rec_doctor_name,
+        "doctor_title":         rec_doctor_title,
+        "doctor_specialty":     ds_doctor.get("specialty", ""),
+        "appointment_time":     rec_appointment,
         "total_cost":           reg.get("total_cost", 0),
         "total_travel_time_min": route.get("duration_min", 30),
         "distance_km":          route.get("distance_km", 0),
         "queue_estimate_min":   reg.get("queue_estimate_min", 30),
         "score":                reg.get("score", 0),
-        "reason":               route.get("description", ""),
+        "reason":               ds_rec.get("reason", "") or route.get("description", ""),
     }]
-    ds = doctor_schedule or {}
-    ds_doctor = ds.get("doctor") or {}
-    ds_rec = ds.get("recommendation") or {}
     task_params = {
         "department":           department,
         "symptom":              reg.get("symptom", ""),
