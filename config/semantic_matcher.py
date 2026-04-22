@@ -20,6 +20,16 @@ logger = logging.getLogger(__name__)
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LIB_DIR = os.path.join(_BASE_DIR, "lib")
+
+# lib/ 里的 vendored PIL 是破碎的(缺 _imaging 原生扩展),
+# 而 reportlab 依赖可用的 PIL。在把 lib/ 推到 sys.path[0] 之前,
+# 先让 Python 从 site-packages 加载系统 PIL 并缓存到 sys.modules,
+# 这样后续 reportlab 的 `import PIL` 走 cache,不会落到破碎版。
+try:  # 系统有 PIL 时优先锁定;没有也不影响语义匹配器本身
+    import PIL  # noqa: F401
+except ImportError:
+    pass
+
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 

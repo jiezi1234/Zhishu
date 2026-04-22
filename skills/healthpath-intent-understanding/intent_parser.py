@@ -31,6 +31,8 @@ def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
         if task:
             task.setdefault("timestamp", datetime.now().isoformat())
             task.setdefault("doctor_name", extract_doctor_name(user_input))
+            task.setdefault("user_location", extract_user_location(user_input))
+            task.setdefault("target_hospital", extract_target_hospital(user_input))
             return task
 
     # 本地解析：symptom / department 走语义，其余走规则
@@ -40,6 +42,8 @@ def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
         "symptom":              symptom,
         "department":           department,
         "doctor_name":          extract_doctor_name(user_input),
+        "user_location":        extract_user_location(user_input),
+        "target_hospital":      extract_target_hospital(user_input),
         "target_city":          "北京",
         "time_window":          extract_time_window(user_input),
         "budget":               extract_budget(user_input),
@@ -54,24 +58,94 @@ def parse_intent(user_input: str, use_deepseek: bool = True) -> dict:
 
 # ── 语义提取：symptom + department（一次检索，两个字段）────────────
 
+# 明确症状关键词/正则直接映射,避免长句语义检索被"我""的""想"等高频词带偏。
+# 每条规则的 patterns 可以是 str(子串匹配)或 re.Pattern(正则搜索),
+# 后者用于处理"头有点痛""肚子一阵一阵疼"这类允许中间插字的表达。
+# 顺序敏感:更具体的条目放在前面。
+_SYMPTOM_RULES: list[tuple[list, str, str]] = [
+    # 头痛——允许"头…痛/疼"中间插入描述词
+    ([re.compile(r"头[^，,。.!！?？\n]{0,5}(?:痛|疼)"),
+      "偏头痛", "脑袋痛", "脑袋疼"],                               "头痛",       "神经内科"),
+    # 胸痛/胸闷
+    ([re.compile(r"胸(?:口|部)?[^，,。.!！?？\n]{0,3}(?:痛|疼|闷)"),
+      "压榨样胸痛", "心前区痛"],                                   "胸痛",       "心内科"),
+    # 心悸
+    (["心悸", "心慌", "心跳快", "心跳乱"],                         "心悸",       "心内科"),
+    # 腹痛/肚子痛
+    ([re.compile(r"(?:腹部?|肚子)[^，,。.!！?？\n]{0,4}(?:痛|疼)")],"腹痛",       "消化内科"),
+    # 腰背痛
+    ([re.compile(r"腰(?:部|背)?[^，,。.!！?？\n]{0,3}(?:痛|疼)"),
+      "腰背痛"],                                                   "腰背痛",     "骨科"),
+    # 颈部不适
+    ([re.compile(r"(?:颈(?:部|椎)|脖子)[^，,。.!！?？\n]{0,3}(?:痛|疼|僵|硬)"),
+      "颈椎病"],                                                   "颈部不适",   "骨科"),
+    # 咯血
+    (["咯血", "痰中带血"],                                         "咯血",       "呼吸科"),
+    # 咳嗽
+    (["咳嗽", "咳痰"],                                             "咳嗽",       "呼吸科"),
+    # 发热
+    (["发烧", "发热", "高热", "低热"],                             "发热",       "感染科"),
+    # 便血
+    (["便血"],                                                     "便血",       "消化内科"),
+    # 呕血
+    (["呕血", "吐血"],                                             "呕血",       "消化内科"),
+    # 恶心呕吐
+    (["恶心", "想吐", "呕吐"],                                     "恶心与呕吐", "消化内科"),
+    # 尿血
+    (["尿血"],                                                     "尿血",       "泌尿科"),
+    # 小便异常
+    (["尿频", "尿急", "尿痛", "排尿刺痛"],                          "小便异常",   "泌尿科"),
+    # 鼻出血
+    (["鼻出血", "流鼻血"],                                         "鼻出血",     "耳鼻喉科"),
+    # 鼻部问题
+    (["鼻塞", "鼻涕", "鼻炎"],                                     "鼻部问题",   "耳鼻喉科"),
+    # 水肿
+    (["水肿", "浮肿"],                                             "水肿",       "肾内科"),
+    # 头晕/眩晕(独立于头痛的表达)
+    (["头晕", "晕眩", "天旋地转"],                                 "头晕",       "神经内科"),
+    # 失眠
+    (["失眠", "睡不着"],                                           "失眠",       "神经内科"),
+    # 皮肤问题
+    (["皮疹", "瘙痒", "皮肤"],                                     "皮肤问题",   "皮肤科"),
+    # 眼部问题
+    (["眼睛", "视力", "眼痛"],                                     "眼部问题",   "眼科"),
+    # 口腔问题
+    ([re.compile(r"牙[^，,。.!！?？\n]{0,3}(?:痛|疼)"),
+      "口腔溃疡", "牙龈"],                                         "口腔问题",   "口腔科"),
+    # 妇科
+    (["月经", "白带", "痛经"],                                     "月经和白带", "妇科"),
+]
+
+
+def _keyword_symptom_match(text: str) -> tuple[str, str] | None:
+    for patterns, symptom, dept in _SYMPTOM_RULES:
+        for p in patterns:
+            if isinstance(p, str):
+                if p in text:
+                    return symptom, dept
+            else:  # re.Pattern
+                if p.search(text):
+                    return symptom, dept
+    return None
+
+
 def _extract_symptom_and_dept(text: str) -> tuple[str, str]:
     """
-    一次语义检索同时得到 symptom 和 department。
-    symptom 取命中 route 的末级节点名（患者可读）。
+    先用关键词/正则规则匹配明确症状;规则未命中时再走语义检索兜底。
+    symptom 取命中 route 的末级节点名(患者可读)。
     department 通过与 symptom_triage 共享的映射表转换。
     """
+    kw_hit = _keyword_symptom_match(text)
+    if kw_hit:
+        return kw_hit
+
     hits = search_knowledge(text, k=1)
     if not hits:
         return "未指定", "未指定"
 
     route = hits[0]["route"]
-
-    # symptom：取 route 最后一段，例如 "疼痛/腰背痛" → "腰背痛"
     symptom = route.split("/")[-1]
-
-    # department：复用 symptom_triage 的映射逻辑
     department = _route_to_dept(route)
-
     return symptom, department or "未指定"
 
 
@@ -185,6 +259,45 @@ def extract_special_requirements(text: str) -> str:
     if "医保" in text:
         reqs.append("medical_insurance")
     return ",".join(reqs)
+
+
+# ── 位置 / 目标医院抽取(规则式) ─────────────────────────────────
+
+_LOCATION_BAD_WORDS = {
+    "头", "痛", "疼", "病", "医院", "挂号", "想", "找", "挂",
+    "发烧", "发热", "咳嗽", "问诊", "治疗",
+}
+
+
+def extract_user_location(text: str) -> str:
+    """从 '我在 XXX' / '现在在 XXX' 类表达中提取用户当前位置。"""
+    import re as _re
+    patterns = [
+        r"我(?:现在|目前)?在([^,，。.!！?？\s]{3,30}?)(?:[，,。.\s]|$)",
+        r"(?:现在|目前|当前)在([^,，。.!！?？\s]{3,30}?)(?:[，,。.\s]|$)",
+    ]
+    for p in patterns:
+        m = _re.search(p, text)
+        if m:
+            loc = m.group(1).strip()
+            if len(loc) >= 3 and not any(bw in loc for bw in _LOCATION_BAD_WORDS):
+                return loc
+    return ""
+
+
+def extract_target_hospital(text: str) -> str:
+    """从 '挂/去/到 XX 医院' 类表达中提取目标医院全称。"""
+    import re as _re
+    m = _re.search(
+        r"(?:挂|去|到|找|上|进|在|想去)\s*(?:个|一个|家|一家)?\s*([\u4e00-\u9fa5]{2,15}医院)",
+        text,
+    )
+    if m:
+        return m.group(1)
+    m = _re.search(r"([\u4e00-\u9fa5]{2,15}医院)", text)
+    if m:
+        return m.group(1)
+    return ""
 
 
 # ── 医生姓名抽取(规则式) ─────────────────────────────────────────

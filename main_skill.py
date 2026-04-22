@@ -73,6 +73,15 @@ class HealthPathAgent:
             explicit_dept = (intent_result or {}).get("department", "")
             has_explicit_dept = bool(explicit_dept and explicit_dept != "未指定")
 
+            # 自动回填：用户在原文已说出位置,无需再问
+            if not user_location:
+                loc_from_intent = (intent_result or {}).get("user_location", "")
+                if loc_from_intent:
+                    user_location = loc_from_intent
+                    logger.info("[智枢] 从 intent 自动回填 user_location: %s", user_location)
+
+            intent_target_hospital = (intent_result or {}).get("target_hospital", "") or ""
+
             # Step 2: 症状分诊（可跳过）
             if has_explicit_dept:
                 departments = [explicit_dept]
@@ -132,12 +141,32 @@ class HealthPathAgent:
                 return result
 
             if not selected_hospital:
-                result["status"] = "awaiting_hospital_selection"
-                result["final_output"] = {
-                    "candidates": candidates,
-                    "message": "以下是附近医院候选，请告知您选择哪一家：",
-                }
-                return result
+                # 原文已指定医院,且在候选中 → 自动选
+                if intent_target_hospital:
+                    for cand in candidates:
+                        name = cand.get("hospital_name", "")
+                        if (name == intent_target_hospital
+                                or intent_target_hospital in name
+                                or name in intent_target_hospital):
+                            selected_hospital = name
+                            logger.info(
+                                "[智枢] 从 intent 自动选择医院: %s", selected_hospital
+                            )
+                            break
+
+                if not selected_hospital:
+                    result["status"] = "awaiting_hospital_selection"
+                    msg = "以下是附近医院候选，请告知您选择哪一家："
+                    if intent_target_hospital:
+                        msg = (
+                            f"您提到的「{intent_target_hospital}」未出现在本次匹配的附近医院列表中，"
+                            "请从以下候选里选择，或告诉我扩大搜索范围："
+                        )
+                    result["final_output"] = {
+                        "candidates": candidates,
+                        "message": msg,
+                    }
+                    return result
 
             # Step 4: 挂号链接
             hospital_info = next(

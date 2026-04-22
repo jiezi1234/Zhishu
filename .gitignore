@@ -49,5 +49,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# 临时 / 调试文件
+_generated_test/
+_run_healthpath.py
+_run_result.json
+_template_extracted.txt
+temp_*.py
+evolution-drafts/
+lib/*.disabled/
+
 # CLAUDE
 CLAUDE.md.openclaw/
