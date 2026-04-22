@@ -56,29 +56,30 @@ _KNOWLEDGE_PATH = os.path.join(
     _BASE_DIR, "skills", "healthpath-symptom-triage", "yixue_knowledge.json"
 )
 
-_NORMALIZATION_RULES = [
-    {"canonical": "心悸", "patterns": ["心慌", "心里扑腾", "心跳快", "心跳乱", "心扑腾", "心跳异常"]},
-    {"canonical": "呼吸困难", "patterns": ["喘不上气", "喘不过气", "憋气", "气不够用", "呼吸费力"]},
-    {"canonical": "尿痛", "patterns": ["小便刺痛", "尿尿疼", "尿刺痛", "尿道刺痛", "排尿刺痛"]},
-    {"canonical": "体位性头晕", "patterns": ["站起来头晕", "起身头晕", "一站起来就晕", "直立后头晕"]},
-    {"canonical": "黑矇", "patterns": ["眼前发黑", "眼黑", "眼前一黑", "发黑看不清"]},
-    {"canonical": "胸痛", "patterns": ["剧烈胸痛", "胸口痛", "胸口疼", "心前区疼", "心前区痛"]},
-    {"canonical": "发热", "patterns": ["发烧", "体温升高", "高热", "低热", "烧到", "烧了"]},
-    {"canonical": "关节炎", "patterns": ["关节红肿", "关节肿痛", "关节疼痛", "关节发炎", "关节肿"]},
-    {"canonical": "耳痛", "patterns": ["耳朵疼", "耳痛", "耳朵痛", "耳内疼"]},
-    {"canonical": "耳鸣", "patterns": ["嗡嗡响", "耳鸣", "耳朵嗡嗡", "耳朵响", "耳内嗡嗡"]},
-    {"canonical": "颈部僵硬", "patterns": ["脖子僵硬", "颈部僵硬", "脖子硬", "转头疼", "脖子不能转"]},
-]
+_NORMALIZATION_RULES: list[dict] | None = None
+_KNOWLEDGE: dict | None = None
 
-_ROUTE_ALIASES = {
-    "常见症状辨病/心悸": ["心慌", "心跳快", "心跳乱", "心扑腾", "心前区不适"],
-    "观察分泌物排泄物辨病/小便": ["小便刺痛", "尿痛", "尿频", "尿急", "排尿刺痛"],
-    "常见症状辨病/疼痛/头痛": ["头晕", "黑矇", "脑供血不足", "体位性头晕", "站起来头晕"],
-    "观察机体局部辨病/眼睛": ["红眼", "眼痛", "畏光", "流泪", "视力下降"],
-    "常见症状辨病/疼痛/胸痛": ["剧烈胸痛", "胸闷", "心前区痛", "压榨样胸痛"],
-    "常见症状辨病/发热": ["发烧", "高热", "体温升高", "低热", "发热", "烧到", "全身酸痛", "浑身酸痛"],
-    "观察机体局部辨病/颈部": ["脖子僵硬", "颈部僵硬", "转头疼", "脖子硬", "颈部不适", "脖子不能转"],
-}
+
+def _load_knowledge() -> dict:
+    """加载 yixue_knowledge.json 并缓存。医学知识数据（归一化规则、别名、关键词）集中在此文件，Python 代码不再硬编码。"""
+    global _KNOWLEDGE, _NORMALIZATION_RULES
+    if _KNOWLEDGE is not None:
+        return _KNOWLEDGE
+    with open(_KNOWLEDGE_PATH, encoding="utf-8") as f:
+        _KNOWLEDGE = json.load(f)
+    _NORMALIZATION_RULES = _KNOWLEDGE.get("normalize_rules", [])
+    return _KNOWLEDGE
+
+
+def _get_normalize_rules() -> list[dict]:
+    if _NORMALIZATION_RULES is None:
+        _load_knowledge()
+    return _NORMALIZATION_RULES or []
+
+
+def get_knowledge() -> dict:
+    """对外暴露整个知识库字典，供 symptom_triage 等模块读取 route_dept / term_dept_rules 等字段。"""
+    return _load_knowledge()
 
 _EMERGENCY_ANCHORS = [
     "剧烈胸痛，压榨感，疑似心肌梗死，心脏急症发作",
@@ -93,14 +94,14 @@ _EMERGENCY_ANCHORS = [
 _EMERGENCY_RULES = [
     {
         "all_of": [
-            ["胸痛", "剧烈胸痛", "胸闷", "心前区痛", "压榨样胸痛"],
+            ["胸痛", "剧烈胸痛", "胸闷", "心前区痛", "压榨样胸痛", "胸口痛", "胸口疼", "胸口剧烈", "胸部剧痛", "胸口疼痛"],
             ["呼吸困难", "喘不上气", "喘不过气", "憋气"],
         ],
         "flag": "胸痛伴呼吸困难，疑似急性心肺急症，建议立即急诊",
     },
     {
         "all_of": [
-            ["胸痛", "剧烈胸痛", "胸闷", "心前区痛"],
+            ["胸痛", "剧烈胸痛", "胸闷", "心前区痛", "胸口痛", "胸口疼", "胸口剧烈", "胸部剧痛"],
             ["冷汗", "大汗", "面色苍白", "四肢发凉"],
         ],
         "flag": "胸痛伴冷汗或面色苍白，疑似急性冠脉综合征，建议立即急诊",
@@ -124,9 +125,13 @@ _EMERGENCY_RULES = [
         "any_of": ["大出血", "大量出血", "呕血", "便血鲜红", "咯血量大"],
         "flag": "存在大量出血风险，建议立即急诊",
     },
+    {
+        "any_of": ["误吞", "误食异物", "吞了个", "吞了一个", "咽下纽扣", "吞下了", "吞进去", "吞了异物"],
+        "flag": "疑似误吞异物，建议立即前往急诊或儿科评估",
+    },
 ]
 
-_EMERGENCY_THRESHOLD = 0.66
+_EMERGENCY_THRESHOLD = 0.75
 _SEARCH_THRESHOLD = 0.40
 
 _model: SentenceTransformer | None = None
@@ -175,7 +180,7 @@ def normalize_symptoms(query: str) -> dict:
     canonical_terms: list[str] = []
     matched_patterns: list[str] = []
 
-    for rule in _NORMALIZATION_RULES:
+    for rule in _get_normalize_rules():
         for pattern in rule["patterns"]:
             if pattern in query:
                 if rule["canonical"] not in canonical_terms:
@@ -216,7 +221,7 @@ def detect_emergency_rules(query: str, normalized: dict | None = None) -> list[s
 
 def _make_doc_text(route: str, page: dict) -> str:
     kws = page.get("keywords") or []
-    aliases = _ROUTE_ALIASES.get(route, [])
+    aliases = page.get("aliases") or []
     parts = [route, page.get("title") or ""]
     parts.extend(kws)
     parts.extend(aliases)
@@ -230,8 +235,7 @@ def _build_index() -> None:
         return
 
     logger.info("[semantic_matcher] 构建知识库索引...")
-    with open(_KNOWLEDGE_PATH, encoding="utf-8") as f:
-        data = json.load(f)
+    data = _load_knowledge()
 
     pages = data["pages"]
     _page_data = pages

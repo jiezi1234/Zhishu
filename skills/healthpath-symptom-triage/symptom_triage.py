@@ -16,7 +16,7 @@ _CONFIG_DIR = os.path.join(_SKILL_DIR, "..", "..", "config")
 if _CONFIG_DIR not in sys.path:
     sys.path.insert(0, _CONFIG_DIR)
 
-from semantic_matcher import detect_emergency, normalize_symptoms, search_knowledge
+from semantic_matcher import detect_emergency, get_knowledge, normalize_symptoms, search_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -25,82 +25,32 @@ DISCLAIMER = (
     "如症状严重或突发，请立即拨打 120 或前往最近急诊。"
 )
 
-_ROUTE_DEPT: list[tuple[str, str]] = [
-    ("常见症状辨病/疼痛/头痛", "神经内科"),
-    ("常见症状辨病/疼痛/胸痛", "心内科"),
-    ("常见症状辨病/疼痛/腹痛", "消化内科"),
-    ("常见症状辨病/疼痛/腰背痛", "骨科"),
-    ("常见症状辨病/心悸", "心内科"),
-    ("常见症状辨病/发热", "发热门诊"),
-    ("常见症状辨病/咳嗽", "呼吸科"),
-    ("常见症状辨病/咯血", "呼吸科"),
-    ("常见症状辨病/便血", "消化内科"),
-    ("常见症状辨病/呕血", "消化内科"),
-    ("常见症状辨病/恶心与呕吐", "消化内科"),
-    ("常见症状辨病/尿血", "泌尿科"),
-    ("常见症状辨病/鼻出血", "耳鼻喉科"),
-    ("常见症状辨病/水肿", "肾内科"),
-    ("常见症状辨病/皮肤粘膜出血", "血液科"),
-    ("常见症状辨病/感觉器官功能异常", "神经内科"),
-    ("观察机体局部辨病/眼睛", "眼科"),
-    ("观察机体局部辨病/皮肤", "皮肤科"),
-    ("观察机体局部辨病/口腔", "口腔科"),
-    ("观察机体局部辨病/四肢形态", "骨科"),
-    ("观察机体局部辨病/脊柱", "骨科"),
-    ("观察机体局部辨病/颈部", "骨科"),
-    ("观察机体局部辨病/胸廓形态", "呼吸科"),
-    ("观察机体局部辨病/脉搏", "心内科"),
-    ("观察机体局部辨病/腹部", "消化内科"),
-    ("观察机体局部辨病/头颅", "神经内科"),
-    ("观察机体局部辨病/毛发", "皮肤科"),
-    ("观察机体局部辨病/眉毛", "内分泌科"),
-    ("观察机体局部辨病/鼻", "耳鼻喉科"),
-    ("观察机体局部辨病/耳", "耳鼻喉科"),
-    ("观察分泌物排泄物辨病/痰液", "呼吸科"),
-    ("观察分泌物排泄物辨病/鼻涕", "耳鼻喉科"),
-    ("观察分泌物排泄物辨病/大便", "消化内科"),
-    ("观察分泌物排泄物辨病/小便", "泌尿科"),
-    ("观察分泌物排泄物辨病/汗液异常", "内分泌科"),
-    ("饮食起居辨病/失眠", "神经内科"),
-    ("饮食起居辨病/嗜睡", "神经内科"),
-    ("饮食起居辨病/睡眠", "神经内科"),
-    ("饮食起居辨病/说话异常", "神经内科"),
-    ("饮食起居辨病/运动异常", "神经内科"),
-    ("饮食起居辨病/饮食", "消化内科"),
-    ("妇科疾病/", "妇科"),
-    ("儿童疾病/", "儿科"),
-]
+_LOW_CONF_ABS = 0.45
+_LOW_CONF_SOFT_NO_CANON = 0.60
+_LOW_CONF_SOFT_WITH_CANON = 0.50
+_LOW_CONF_GAP = 0.03
 
-_PARENT_ONLY_ROUTES = {
-    "常见症状辨病",
-    "常见症状辨病/疼痛",
-    "常见症状辨病/出血",
-    "神色形态辨病",
-    "观察机体局部辨病",
-    "观察分泌物排泄物辨病",
-    "饮食起居辨病",
-    "儿童疾病",
-    "妇科疾病",
-}
+_ROUTE_DEPT: list[tuple[str, str]] | None = None
+_PARENT_ONLY_ROUTES: set[str] | None = None
+_TERM_DEPT_RULES: dict | None = None
 
-_TERM_DEPT_RULES = {
-    "体位性头晕": {"boost": {"神经内科": 3.0, "心内科": 2.5}, "suppress": {"眼科": 2.5}},
-    "黑矇": {"boost": {"神经内科": 2.5, "心内科": 2.0}, "suppress": {"眼科": 2.0}},
-    "尿痛": {"boost": {"泌尿科": 4.0}, "suppress": {"消化内科": 3.0, "儿科": 1.5}},
-    "心悸": {"boost": {"心内科": 4.0}, "suppress": {"肾内科": 2.5}},
-    "呼吸困难": {"boost": {"呼吸科": 2.0, "心内科": 1.5}, "suppress": {}},
-    "发热": {"boost": {"发热门诊": 3.5, "呼吸科": 2.0, "感染科": 2.0}, "suppress": {"神经内科": 3.0, "骨科": 2.0}},
-    "关节炎": {"boost": {"骨科": 3.5, "风湿免疫科": 3.0}, "suppress": {"妇科": 5.0, "神经内科": 2.0}},
-    "耳痛": {"boost": {"耳鼻喉科": 4.0}, "suppress": {"神经内科": 4.0}},
-    "耳鸣": {"boost": {"耳鼻喉科": 4.0}, "suppress": {"神经内科": 4.0}},
-    "颈部僵硬": {"boost": {"骨科": 3.5, "康复科": 2.5}, "suppress": {"神经内科": 3.0}},
-}
+
+def _ensure_rules() -> None:
+    """首次使用时从 yixue_knowledge.json 加载路由/科室映射与打分规则。"""
+    global _ROUTE_DEPT, _PARENT_ONLY_ROUTES, _TERM_DEPT_RULES
+    if _ROUTE_DEPT is not None:
+        return
+    kb = get_knowledge()
+    _ROUTE_DEPT = [(entry[0], entry[1]) for entry in kb.get("route_dept", [])]
+    _PARENT_ONLY_ROUTES = set(kb.get("parent_only_routes", []))
+    _TERM_DEPT_RULES = kb.get("term_dept_rules", {}) or {}
 
 
 def triage(symptom_text: str, user_profile: dict | None = None, extra_answers: dict | None = None) -> dict:
     user_profile = user_profile or {}
     extra_answers = extra_answers or {}
     age_group = user_profile.get("age_group", "adult")
+    _ensure_rules()
     normalized = normalize_symptoms(symptom_text)
 
     logger.info(f"[symptom_triage] 输入: {symptom_text[:60]}")
@@ -141,6 +91,21 @@ def triage(symptom_text: str, user_profile: dict | None = None, extra_answers: d
             routes=[],
         )
 
+    top_score = hits[0]["score"]
+    gap = top_score - (hits[1]["score"] if len(hits) > 1 else 0.0)
+    soft_thresh = _LOW_CONF_SOFT_WITH_CANON if normalized["canonical_terms"] else _LOW_CONF_SOFT_NO_CANON
+    if top_score < _LOW_CONF_ABS or (top_score < soft_thresh and gap < _LOW_CONF_GAP):
+        logger.info(f"[symptom_triage] 低置信度 top={top_score:.3f} gap={gap:.3f} canon={normalized['canonical_terms']}，转追问")
+        return _need_more(
+            diagnosis="症状描述不够清晰，暂无法稳定判断科室，请补充更多信息。",
+            questions=[
+                {"id": "symptom_location", "question": "不适的具体部位在哪里？例如头部、胸部、腹部、四肢。"},
+                {"id": "symptom_nature", "question": "症状更像疼痛、酸胀、发热、头晕、排尿异常还是其他？"},
+                {"id": "duration", "question": "症状持续多久了？是否伴随其他不适？"},
+            ],
+            routes=[h["route"] for h in hits[:3]],
+        )
+
     top_route = hits[0]["route"]
     if top_route in _PARENT_ONLY_ROUTES:
         return _need_more(
@@ -153,8 +118,9 @@ def triage(symptom_text: str, user_profile: dict | None = None, extra_answers: d
         )
 
     departments = _rank_departments(symptom_text, hits, age_group)
-    referenced = [h["route"] for h in hits[:3]]
-    diagnosis = _generate_diagnosis(symptom_text, departments, hits[0], age_group)
+    referenced = _referenced_routes(hits, departments)
+    top_for_diag = {"route": referenced[0]} if referenced else hits[0]
+    diagnosis = _generate_diagnosis(symptom_text, departments, top_for_diag, age_group)
 
     logger.info(f"[symptom_triage] 推荐科室: {departments}")
 
@@ -170,13 +136,32 @@ def triage(symptom_text: str, user_profile: dict | None = None, extra_answers: d
 
 
 def _route_to_dept(route: str) -> str | None:
+    _ensure_rules()
     for prefix, dept in _ROUTE_DEPT:
         if route.startswith(prefix):
             return dept
     return None
 
 
+def _referenced_routes(hits: list[dict], departments: list[str]) -> list[str]:
+    """展示的参考路由：只保留与最终推荐科室一致的 hits，避免被压制的误匹配路由误导用户。"""
+    _ensure_rules()
+    dept_set = set(departments)
+    out: list[str] = []
+    for h in hits:
+        if h["route"] in _PARENT_ONLY_ROUTES:
+            continue
+        if _route_to_dept(h["route"]) in dept_set and h["route"] not in out:
+            out.append(h["route"])
+        if len(out) >= 3:
+            break
+    if not out:
+        return [h["route"] for h in hits[:3]]
+    return out
+
+
 def _rank_departments(symptom_text: str, hits: list[dict], age_group: str) -> list[str]:
+    _ensure_rules()
     normalized = normalize_symptoms(symptom_text)
     scores: dict[str, float] = {}
 
@@ -217,6 +202,7 @@ def _rank_departments(symptom_text: str, hits: list[dict], age_group: str) -> li
 
 
 def _hits_to_departments(hits: list[dict], age_group: str) -> list[str]:
+    _ensure_rules()
     depts = []
     for hit in hits:
         if hit["route"] in _PARENT_ONLY_ROUTES:

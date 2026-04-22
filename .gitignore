@@ -60,3 +60,5 @@ lib/*.disabled/
 
 # CLAUDE
 CLAUDE.md.openclaw/
+demo/
+agent_workspace/
