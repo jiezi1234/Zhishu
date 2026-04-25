@@ -118,5 +118,15 @@
     "platform": "京医通",
     "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E6%9C%9B%E4%BA%AC&destination=%E4%B8%AD%E5%9B%BD%E4%B8%AD%E5%8C%BB%E7%A7%91%E5%AD%A6%E9%99%A2%E6%9C%9B%E4%BA%AC%E5%8C%BB%E9%99%A2%28%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E4%B8%AD%E7%8E%AF%E5%8D%97%E8%B7%AF6%E5%8F%B7%29&mode=transit",
     "last_visit": "2026-04-22T17:23:25.107228"
+  },
+  "北京协和医院(东单院区)": {
+    "hospital_name": "北京协和医院(东单院区)",
+    "address": "北京市东城区帅府园1号",
+    "department": "神经内科",
+    "official_url": "https://www.pumch.cn/",
+    "registration_url": "",
+    "platform": "",
+    "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%B5%B7%E6%B7%80%E5%8C%BA%E5%8C%97%E5%A4%AA%E5%B9%B3%E5%BA%84&destination=%E5%8C%97%E5%A4%AA%E5%B9%B3%E5%BA%84%E8%B7%AF-4%E5%8F%B7%E6%A5%BC%28%E5%8C%97%E4%BA%AC%E5%B8%82%E6%B5%B7%E6%B7%80%E5%8C%BA%E5%8C%97%E4%B8%89%E7%8E%AF%E4%B8%AD%E8%B7%AF37%E5%8F%B7%E9%99%A2%29&mode=transit",
+    "last_visit": "2026-04-22T17:01:38.960148"
   }
 }

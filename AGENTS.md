@@ -247,6 +247,13 @@ If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and 
 - "Save as Excel" / "make a spreadsheet" → default to local `.xlsx` or `.csv`, not Google Sheets or cloud tools (unless explicitly asked).
 - Produce the actual file, not just a description of where it would go.
 
+### Deployment Tasks
+
+- When asked to deploy this project or help another user deploy it, first read `agent_workspace/agent_deployment_guide.md`.
+- Treat that guide as the deployment runbook: follow its dependency inventory, environment variable checklist, AutoClaw registration steps, validation commands, and troubleshooting order.
+- Deployment is not complete until the agent has run the guide's minimum verification path or clearly reported which verification step is blocked and why.
+- Do not invent new deployment steps before checking the guide; update the guide if the project structure or deployment process changes.
+
 ### Messaging / IM
 
 - When the result is a file, image, or attachment, send the actual file — not just a local path.

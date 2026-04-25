@@ -42,6 +42,7 @@ from itinerary_builder import build
 
 class HealthPathAgent:
     name = "智枢"
+    display_name = "智枢"
     version = "3.0.0"
     description = "基于长链路协同的全人群医旅调度智能体"
 
@@ -57,7 +58,7 @@ class HealthPathAgent:
         output_format: str = "large_font_pdf",
         user_profile: Optional[dict] = None,
     ) -> Dict[str, Any]:
-        logger.info("[智枢] 开始处理: %s", user_input[:80])
+        logger.info("[HealthPath] processing: %s", user_input[:80])
         result: Dict[str, Any] = {
             "status": "success",
             "steps": {},
@@ -67,11 +68,14 @@ class HealthPathAgent:
         }
 
         try:
-            # Step 1: 意图结构化
+            # Step 1: intent understanding
             intent_result = parse_intent(user_input, use_deepseek=True)
             result["steps"]["intent"] = intent_result
+
             explicit_dept = (intent_result or {}).get("department", "")
-            has_explicit_dept = bool(explicit_dept and explicit_dept != "未指定")
+            has_explicit_dept = bool(
+                explicit_dept and explicit_dept not in {"未指定", "unknown", "unspecified"}
+            )
 
             # 自动回填：用户在原文已说出位置,无需再问
             if not user_location:
@@ -92,7 +96,7 @@ class HealthPathAgent:
                     "follow_up_questions": [],
                     "preliminary_diagnosis": "用户已明确目标科室，跳过分诊。",
                     "referenced_routes": [],
-                    "disclaimer": "⚠️ 以上判断仅供参考，不构成医学诊断，不替代执业医师意见。如症状严重或突发，请立即拨打 120 或前往最近急诊。",
+                    "disclaimer": "以上仅供参考，不替代执业医师诊断。",
                 }
             else:
                 triage_result = triage(
@@ -106,7 +110,7 @@ class HealthPathAgent:
                     result["status"] = "emergency_warning"
                     result["final_output"] = {
                         "warning": triage_result["warning_flags"],
-                        "message": "检测到危急症状，建议立即就近急诊或拨打 120！",
+                        "message": "检测到急症信号，请立即前往急诊或拨打120。",
                     }
                     return result
 
@@ -122,12 +126,12 @@ class HealthPathAgent:
                 result["follow_up"] = [
                     {
                         "id": "location",
-                        "question": "请告诉我您当前的地址或所在区域（如：朝阳区望京街道），以便为您查找附近医院。",
+                        "question": "请告诉我您当前所在区域（如：北京市海淀区），以便推荐附近医院。",
                     }
                 ]
                 return result
 
-            # Step 3: 医院匹配
+            # Step 3: hospital matching
             match_result = match(
                 user_location=user_location,
                 departments=departments,
@@ -135,9 +139,10 @@ class HealthPathAgent:
             )
             result["steps"]["match"] = match_result
             candidates = match_result.get("candidates", [])
+
             if not candidates:
                 result["status"] = "no_hospitals_found"
-                result["error"] = "附近未找到符合条件的医院，请尝试放宽条件或修改位置"
+                result["error"] = "附近未找到符合条件的医院，请调整条件后重试。"
                 return result
 
             if not selected_hospital:
@@ -168,7 +173,7 @@ class HealthPathAgent:
                     }
                     return result
 
-            # Step 4: 挂号链接
+            # Step 4: registration info
             hospital_info = next(
                 (h for h in candidates if h.get("hospital_name") == selected_hospital),
                 {"hospital_name": selected_hospital, "address": "", "yixue_url": ""},
@@ -309,7 +314,7 @@ class HealthPathAgent:
         except Exception as e:
             import traceback
 
-            logger.error("[智枢] 执行失败: %s", e)
+            logger.error("[HealthPath] execution failed: %s", e)
             result["status"] = "error"
             result["error"] = str(e)
             result["traceback"] = traceback.format_exc()
@@ -318,6 +323,7 @@ class HealthPathAgent:
     def get_info(self) -> Dict[str, Any]:
         return {
             "name": self.name,
+            "display_name": self.display_name,
             "version": self.version,
             "description": self.description,
             "skills": [

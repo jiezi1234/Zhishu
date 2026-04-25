@@ -205,8 +205,12 @@ def _plan_route(origin: str, dest: str, token: str = None, depth: int = 0) -> di
     """
     import os
     import requests
-    from dotenv import load_dotenv
-    load_dotenv()
+    try:
+        from dotenv import load_dotenv  # type: ignore
+        load_dotenv()
+    except Exception:
+        # Keep dotenv optional: route planning should gracefully fall back when dependency is absent.
+        pass
     
     # 默认值（降级）
     dist_est = 5.0

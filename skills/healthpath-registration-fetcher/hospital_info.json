@@ -91,5 +91,12 @@
     "registration_platform": "医院官网",
     "booking_note": "请以医院官网最新放号信息为准。",
     "updated_at": "2026-04-22T17:19:14.336975"
+  },
+  "北京协和医院": {
+    "official_url": "https://www.pumch.cn/",
+    "registration_url": "https://www.pumch.cn/",
+    "registration_platform": "医院官网",
+    "booking_note": "请以医院官网最新放号信息为准。",
+    "updated_at": "2026-04-22T16:51:31.911082"
   }
 }

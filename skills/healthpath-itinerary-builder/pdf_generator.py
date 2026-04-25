@@ -31,6 +31,9 @@ try:
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
+    # Keep module importable when ReportLab is missing.
+    class Flowable:  # type: ignore
+        pass
 
 # ── 颜色系统 ──────────────────────────────────────────────────────────────
 if REPORTLAB_AVAILABLE:

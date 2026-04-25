@@ -61,4 +61,9 @@ lib/*.disabled/
 # CLAUDE
 CLAUDE.md.openclaw/
 demo/
+
+# autoclaw
 agent_workspace/
+memory.md
+memory/
+_generated/
