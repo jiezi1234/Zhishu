@@ -21,13 +21,13 @@
   },
   "北京协和医院": {
     "hospital_name": "北京协和医院",
-    "address": "东城区帅府园1号",
+    "address": "北京市东城区帅府园1号",
     "department": "神经内科",
-    "official_url": "",
-    "registration_url": "https://www.bjguahao.gov.cn/",
-    "platform": "京医通",
+    "official_url": "https://www.pumch.cn/",
+    "registration_url": "https://www.pumch.cn/",
+    "platform": "医院官网",
     "route_map_url": "https://map.baidu.com/dir/?origin=%E5%8C%97%E4%BA%AC%E5%B8%82%E6%9C%9D%E9%98%B3%E5%8C%BA%E6%9C%9B%E4%BA%AC%E8%A1%97%E9%81%93&destination=%E5%8C%97%E4%BA%AC%E5%8D%8F%E5%92%8C%E5%8C%BB%E9%99%A2%28%E4%B8%9C%E5%8D%95%E9%99%A2%E5%8C%BA%29%28%E5%8C%97%E4%BA%AC%E5%B8%82%E4%B8%9C%E5%9F%8E%E5%8C%BA%E5%B8%85%E5%BA%9C%E5%9B%AD1%E5%8F%B7%29&mode=transit",
-    "last_visit": "2026-04-21T21:31:46.180458"
+    "last_visit": "2026-04-22T20:57:07.752050"
   },
   "北京市昌平区沙河医院": {
     "hospital_name": "北京市昌平区沙河医院",

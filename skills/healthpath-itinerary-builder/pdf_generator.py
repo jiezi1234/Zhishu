@@ -78,6 +78,141 @@ def register_chinese_fonts() -> Optional[str]:
     return None
 
 
+def _wrap_text(text: str, width: int) -> List[str]:
+    if not text:
+        return [""]
+    text = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    wrapped: List[str] = []
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            wrapped.append("")
+            continue
+        while len(line) > width:
+            wrapped.append(line[:width])
+            line = line[width:]
+        wrapped.append(line)
+    return wrapped or [""]
+
+
+def _pdf_hex(text: str) -> bytes:
+    return text.encode("utf-16-be").hex().upper().encode("ascii")
+
+
+def _build_fallback_lines(recommendations: List[Dict], task_params: Dict) -> List[str]:
+    lines = ["就医行程单", "=" * 60, ""]
+    if recommendations:
+        r = recommendations[0]
+        lines += [
+            f"医院：{r.get('hospital_name', '—')}",
+            f"科室：{task_params.get('department', '—')}",
+            f"医生：{r.get('doctor_name', '')} {r.get('doctor_title', '')}".strip(),
+            f"时间：{r.get('appointment_time', '—')}",
+            "",
+            f"出发时间：{task_params.get('depart_time', '—')}",
+            f"路线：{task_params.get('route_description', '—')}",
+            f"导航：{task_params.get('route_map_url', '—')}",
+            "",
+            f"挂号平台：{task_params.get('registration_platform', '—')}",
+            f"挂号链接：{task_params.get('registration_url', '—')}",
+            f"注意事项：{task_params.get('booking_note', '—')}",
+            "",
+            "出行清单：身份证 / 医保卡 / 手机 / 钱包",
+        ]
+    else:
+        lines.append("未找到匹配号源，请稍后重试。")
+    lines += ["", "=" * 60, "祝您就医顺利！"]
+    return lines
+
+
+def _generate_basic_pdf_fallback(recommendations: List[Dict],
+                                 task_params: Dict, output_path: str):
+    """
+    Pure-Python PDF fallback using the built-in CJK font STSong-Light.
+    This keeps the output as a valid PDF even when ReportLab or local
+    Windows fonts are unavailable.
+    """
+    base_lines = _build_fallback_lines(recommendations, task_params)
+    wrapped_lines: List[str] = []
+    for line in base_lines:
+        wrapped_lines.extend(_wrap_text(line, 34))
+
+    page_w = 595
+    page_h = 842
+    margin_x = 50
+    margin_top = 64
+    margin_bottom = 50
+    font_size = 12
+    line_height = 18
+    lines_per_page = max(1, int((page_h - margin_top - margin_bottom) / line_height))
+    pages = [
+        wrapped_lines[i:i + lines_per_page]
+        for i in range(0, len(wrapped_lines), lines_per_page)
+    ] or [["就医行程单生成失败"]]
+
+    objects: List[bytes] = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"",
+        b"<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [4 0 R] >>",
+        b"<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /DW 1000 >>",
+    ]
+    page_object_ids: List[int] = []
+
+    for page_lines in pages:
+        stream_lines = [
+            b"BT",
+            f"/F1 {font_size} Tf".encode("ascii"),
+            f"{line_height} TL".encode("ascii"),
+            f"1 0 0 1 {margin_x} {page_h - margin_top} Tm".encode("ascii"),
+        ]
+        first = True
+        for line in page_lines:
+            prefix = b"" if first else b"T* "
+            stream_lines.append(prefix + b"<" + _pdf_hex(line) + b"> Tj")
+            first = False
+        stream_lines.append(b"ET")
+        stream = b"\n".join(stream_lines) + b"\n"
+        content_obj = (
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" +
+            stream + b"endstream"
+        )
+        objects.append(content_obj)
+        content_id = len(objects)
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] "
+            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>"
+        ).encode("ascii")
+        objects.append(page_obj)
+        page_object_ids.append(len(objects))
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_object_ids).encode("ascii")
+    objects[1] = (
+        b"<< /Type /Pages /Count " + str(len(page_object_ids)).encode("ascii") +
+        b" /Kids [" + kids + b"] >>"
+    )
+
+    pdf = bytearray(b"%PDF-1.4\n%\x93\x8c\x8b\x9e HealthPath fallback PDF\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode("ascii"))
+        pdf.extend(obj)
+        pdf.extend(b"\nendobj\n")
+
+    xref_pos = len(pdf)
+    pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    pdf.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    pdf.extend(
+        b"trailer\n<< /Size " + str(len(objects) + 1).encode("ascii") +
+        b" /Root 1 0 R >>\nstartxref\n" +
+        str(xref_pos).encode("ascii") + b"\n%%EOF\n"
+    )
+    with open(output_path, "wb") as f:
+        f.write(pdf)
+
+
 # ── 字体尺寸 ──────────────────────────────────────────────────────────────
 class FontSizes:
     def __init__(self, large: bool = False):
@@ -788,11 +923,11 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
     卡片顺序：就诊信息 → 路线规划 → 挂号信息 → 就医方案 → 出行清单 → 医院对比
     """
     if not REPORTLAB_AVAILABLE:
-        _generate_text_fallback(recommendations, task_params, output_path)
+        _generate_basic_pdf_fallback(recommendations, task_params, output_path)
         return
     font_name = register_chinese_fonts()
     if not font_name:
-        _generate_text_fallback(recommendations, task_params, output_path)
+        _generate_basic_pdf_fallback(recommendations, task_params, output_path)
         return
 
     fs       = FontSizes(large=large_font)
@@ -838,7 +973,10 @@ def generate_pdf_document(recommendations: List[Dict], task_params: Dict,
     else:
         elements.append(_empty_card(font_name, fs))
 
-    doc.build(elements, onFirstPage=on_page, onLaterPages=on_later)
+    try:
+        doc.build(elements, onFirstPage=on_page, onLaterPages=on_later)
+    except Exception:
+        _generate_basic_pdf_fallback(recommendations, task_params, output_path)
 
 
 def _empty_card(font_name, fs):

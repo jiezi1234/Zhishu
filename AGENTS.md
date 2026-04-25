@@ -249,7 +249,7 @@ If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and 
 
 ### Deployment Tasks
 
-- When asked to deploy this project or help another user deploy it, first read `agent_workspace/agent_deployment_guide.md`.
+- When asked to deploy this project or help another user deploy it, first read `agent_deployment_guide.md`.
 - Treat that guide as the deployment runbook: follow its dependency inventory, environment variable checklist, AutoClaw registration steps, validation commands, and troubleshooting order.
 - Deployment is not complete until the agent has run the guide's minimum verification path or clearly reported which verification step is blocked and why.
 - Do not invent new deployment steps before checking the guide; update the guide if the project structure or deployment process changes.
@@ -335,6 +335,7 @@ Periodically (every few days), use a heartbeat to review recent daily files, dis
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
+
 
 <!-- autoclaw:hermes-evolution-guidance -->
 ## Hermes-Evolution
